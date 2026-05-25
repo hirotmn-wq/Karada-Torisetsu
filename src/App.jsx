@@ -310,6 +310,7 @@ export default function App() {
     // Auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       clearTimeout(timeout);
+      const currentUser = session?.user ?? null;
       setUser(currentUser);
       if(!currentUser) { setView("auth"); return; }
       await loadData(session?.user);
