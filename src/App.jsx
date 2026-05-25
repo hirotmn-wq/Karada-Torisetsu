@@ -312,7 +312,7 @@ export default function App() {
       clearTimeout(timeout);
       setUser(currentUser);
       if(!currentUser) { setView("auth"); return; }
-      await loadData(currentUser);
+      await loadData(session?.user);
     });
     return () => { subscription.unsubscribe(); clearTimeout(timeout); };
   },[]);
