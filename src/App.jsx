@@ -306,16 +306,12 @@ export default function App() {
   const [chartPeriod, setChartPeriod] = useState("14d");
 
   useEffect(()=>{
-    const timeout=setTimeout(()=>setView(v=>v==="loading"?"auth":v),4000);
-    // Auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      clearTimeout(timeout);
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if(!currentUser) { setView("auth"); return; }
-      await loadData(session?.user);
-    });
-    return () => { subscription.unsubscribe(); clearTimeout(timeout); };
+    supabase.auth.getSession().then(({data:{session}})=>{
+      const u=session?.user??null;
+      setUser(u);
+      if(!u){setView("auth");return;}
+      loadData(u);
+    }).catch(()=>setView("auth"));
   },[]);
 
   async function loadData(currentUser) {
