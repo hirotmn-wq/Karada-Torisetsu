@@ -230,42 +230,27 @@ function calcAlerts(logs) {
 function calcQuickInsights(logs, weights) {
   const ins = [];
 
-  // 最もインパクトの大きい行動パターン
-  const cal = TAGS.filter(t=>weights[t.id]?.calibrated)
-    .sort((a,b)=>Math.abs(weights[b.id].delta)-Math.abs(weights[a.id].delta));
-  if(cal.length>0){
-    const top=cal[0], pw=weights[top.id];
-    ins.push(`${top.icon} ${top.label}翌日 ${pw.delta>0?"+":""}${pw.delta}kg があなたのパターン`);
-  }
+  // キャリブレーション済みタグをインパクト順に並べて上位2つ表示
+  const cal = TAGS
+    .filter(t => weights[t.id]?.calibrated)
+    .sort((a,b) => Math.abs(weights[b.id].delta) - Math.abs(weights[a.id].delta))
+    .slice(0, 2);
+
+  cal.forEach(t => {
+    const pw = weights[t.id];
+    const sign = pw.delta > 0 ? "+" : "";
+    ins.push(`${t.icon} ${t.label}翌日 ${sign}${pw.delta}kg の傾向`);
+  });
 
   // 直近7日体重トレンド
-  const r7=logs.slice(-7);
-  if(r7.length>=2){
-    const d=+(r7[r7.length-1].weight-r7[0].weight).toFixed(1);
-    if(d<=-0.5) ins.push(`📉 直近7日で${d}kg 改善中`);
-    else if(d>=0.5) ins.push(`📈 直近7日で+${d}kg 増加傾向`);
+  const r7 = logs.slice(-7);
+  if(r7.length >= 2){
+    const d = +(r7[r7.length-1].weight - r7[0].weight).toFixed(1);
+    if(d <= -0.5) ins.push(`📉 直近7日で${d}kg 改善中`);
+    else if(d >= 0.5) ins.push(`📈 直近7日で+${d}kg 増加傾向`);
   }
 
-  // 連続飲酒後の回復パターン
-  const drinkLogs = logs.filter(l=>(l.tags||[]).includes("drinking"));
-  if(drinkLogs.length>=5){
-    const nextDayDeltas=[];
-    drinkLogs.forEach(dl=>{
-      const i=logs.indexOf(dl);
-      if(i<logs.length-1) nextDayDeltas.push(logs[i+1].weight-dl.weight);
-    });
-    if(nextDayDeltas.length>=3){
-      const avg=+(nextDayDeltas.reduce((a,b)=>a+b,0)/nextDayDeltas.length).toFixed(2);
-      if(Math.abs(avg)>0.1) ins.push(`🍺 飲酒翌日 平均${avg>0?"+":""}${avg}kg の傾向`);
-    }
-  }
-
-  return ins.slice(0,3);
-}
-
-function TrendBadge({dir}) {
-  const cfg={"↗":{c:RED,bg:RED_BG,l:"↗ 悪化リスク"},"→":{c:AMBER,bg:AMBER_BG,l:"→ 現状維持"},"↘":{c:TEAL,bg:TEAL_BG,l:"↘ 改善傾向"}}[dir]||{c:"#aaa",bg:"#f5f5f5",l:"—"};
-  return <span style={{padding:"2px 8px",borderRadius:5,background:cfg.bg,color:cfg.c,fontSize:11,fontWeight:600}}>{cfg.l}</span>;
+  return ins.slice(0, 3);
 }
 
 function calcTrendDir(logs, checkup) {
