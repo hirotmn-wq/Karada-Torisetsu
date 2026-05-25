@@ -464,7 +464,11 @@ export default function App() {
     btn:{width:"100%",padding:"12px",fontSize:14,fontWeight:500,borderRadius:10,border:"none",background:TEAL,color:"#fff",cursor:"pointer"},
     ghostBtn:{background:"#f0f0f0",color:"#555",border:"none",padding:"10px 16px",borderRadius:8,fontSize:13,cursor:"pointer"},
     outlineBtn:{background:"#fff",color:TEAL,border:`1.5px dashed ${TEAL}`,padding:"11px 16px",borderRadius:8,fontSize:13,cursor:"pointer",width:"100%",marginTop:10,fontWeight:500},
-  };
+  }
+  function TrendBadge({dir}) {
+  const cfg={"↗":{c:RED,bg:RED_BG,l:"↗ 悪化リスク"},"→":{c:AMBER,bg:AMBER_BG,l:"→ 現状維持"},"↘":{c:TEAL,bg:TEAL_BG,l:"↘ 改善傾向"}}[dir]||{c:"#aaa",bg:"#f5f5f5",l:"—"};
+  return <span style={{padding:"2px 8px",borderRadius:5,background:cfg.bg,color:cfg.c,fontSize:11,fontWeight:600}}>{cfg.l}</span>;
+};
 
   if(view==="loading") return <div style={{...s.page,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#aaa"}}>読み込み中…</div></div>;
   if(view==="auth") return <Auth />;
