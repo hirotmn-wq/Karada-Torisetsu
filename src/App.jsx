@@ -383,6 +383,14 @@ export default function App() {
   }
 
   async function analyze(){
+    if(profile?.analysis_text && profile?.analysis_at){
+      const lastDate=profile.analysis_at.split("T")[0];
+      const lastLog=logs[logs.length-1]?.date??"";
+      if(lastDate===todayStr() && lastLog<=lastDate){
+        setAi({text:profile.analysis_text,loading:false});
+        return;
+      }
+    }
     setAi({text:"",loading:true});
     const weights=calcPersonalWeights(logs);
     const stats=buildStatsForAI(logs,weights,basic);
@@ -392,7 +400,12 @@ export default function App() {
         body:JSON.stringify({prompt:`あなたは健康データアナリストです。以下の統計サマリーをもとに、ユーザーに直接語りかける形で【あなただけの傾向】を3点、具体的に伝えてください。「あなたは〜」という二人称で。一般論禁止。数字・パターン根拠。箇条書き・日本語。\n\n${stats}`})
       });
       const d=await res.json();
-      setAi({text:d.content?.find(c=>c.type==="text")?.text||"分析できませんでした。",loading:false});
+      const text=d.content?.find(c=>c.type==="text")?.text||"分析できませんでした。";
+      setAi({text,loading:false});
+      if(user && text!=="分析できませんでした。"){
+        await supabase.from("profiles").upsert({id:user.id,basic,checkup,analysis_text:text,analysis_at:new Date().toISOString()});
+        setProf({...profile,analysis_text:text,analysis_at:new Date().toISOString()});
+      }
     }catch{setAi({text:"エラーが発生しました。",loading:false});}
   }
 
