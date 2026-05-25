@@ -389,10 +389,7 @@ export default function App() {
     try{
       const res=await fetch("/api/analyze",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          model:"claude-sonnet-4-20250514",max_tokens:600,
-          messages:[{role:"user",content:`あなたは健康データアナリストです。以下の統計サマリーをもとに、ユーザーに直接語りかける形で【あなただけの傾向】を3点、具体的に伝えてください。「あなたは〜」という二人称で。一般論禁止。数字・パターン根拠。箇条書き・日本語。\n\n${stats}`}]
-        })
+        body:JSON.stringify({prompt:`あなたは健康データアナリストです。以下の統計サマリーをもとに、ユーザーに直接語りかける形で【あなただけの傾向】を3点、具体的に伝えてください。「あなたは〜」という二人称で。一般論禁止。数字・パターン根拠。箇条書き・日本語。\n\n${stats}`})
       });
       const d=await res.json();
       setAi({text:d.content?.find(c=>c.type==="text")?.text||"分析できませんでした。",loading:false});
