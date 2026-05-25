@@ -391,7 +391,7 @@ export default function App() {
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({prompt:`あなたは健康データアナリストです。以下の統計サマリーをもとに、ユーザーに直接語りかける形で【あなただけの傾向】を3点、具体的に伝えてください。「あなたは〜」という二人称で。一般論禁止。数字・パターン根拠。箇条書き・日本語。\n\n${stats}`})
       });
-      const d=await res.json();
+      const d=await res.json(); console.log("API response:", JSON.stringify(d).slice(0,300));
       setAi({text:d.content?.find(c=>c.type==="text")?.text||"分析できませんでした。",loading:false});
     }catch{setAi({text:"エラーが発生しました。",loading:false});}
   }
