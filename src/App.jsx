@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import storage from "./storage.js";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import supabase from "./supabase.js";
+import Auth from "./Auth.jsx";
+
 
 const TAGS = [
   {id:"drinking",  label:"飲酒",    dmg:3,  icon:"🍺"},
@@ -25,7 +27,6 @@ const MIN_SAMPLES = {
   exercise:5, poor_sleep:5, late_meal:3
 };
 
-const K = {prof:"condify-v2-prof", logs:"condify-v2-logs"};
 const TEAL="#1D9E75",TEAL_BG="#e1f5ee",RED="#c0392b",RED_BG="#fce8e8",AMBER="#d97706",AMBER_BG="#fef3c7";
 const todayStr = () => new Date().toISOString().split("T")[0];
 const fmtDate  = d => { const x=new Date(d+"T00:00:00"); return `${x.getMonth()+1}/${x.getDate()}`; };
@@ -292,6 +293,7 @@ function calcTrendDir(logs, checkup) {
 }
 
 export default function App() {
+  const [user,   setUser]  = useState(null);
   const [view,   setView]  = useState("loading");
   const [profile,setProf]  = useState(null);
   const [logs,   setLogs]  = useState([]);
@@ -304,56 +306,82 @@ export default function App() {
   const [chartPeriod, setChartPeriod] = useState("14d");
 
   useEffect(()=>{
-    (async()=>{
-      const [p,l]=await Promise.all([
-        storage.get(K.prof).catch(()=>null),
-        storage.get(K.logs).catch(()=>null),
-      ]);
-      const prof=p?JSON.parse(p.value):null;
-      const ls=l?JSON.parse(l.value):[];
-      setProf(prof);setLogs(ls);
-      if(prof?.basic) setBasic(prof.basic);
-      if(prof?.checkup) setChk(prof.checkup);
-      setView(!prof?"welcome":!ls.find(x=>x.date===todayStr())?"input":"dashboard");
-    })();
+    // Auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if(!currentUser) { setView("auth"); return; }
+      await loadData(currentUser);
+    });
+    return () => subscription.unsubscribe();
   },[]);
 
+  async function loadData(currentUser) {
+    try {
+      const [{ data: prof }, { data: logRows }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", currentUser.id).single(),
+        supabase.from("logs").select("*").eq("user_id", currentUser.id).order("date"),
+      ]);
+      const ls = (logRows || []).map(r => ({ date: r.date, weight: r.weight, tags: r.tags||[], cond: r.cond||"" }));
+      setProf(prof);
+      setLogs(ls);
+      if(prof?.basic) setBasic(prof.basic);
+      if(prof?.checkup) setChk(prof.checkup);
+      setView(!prof ? "welcome" : !ls.find(x=>x.date===todayStr()) ? "input" : "dashboard");
+    } catch {
+      setView("welcome");
+    }
+  }
+
   async function loadRealData(){
-    const prof={basic:{birthYear:"1979",height:"169",targetWeight:""},checkup:{sys:"125",dia:"76",ldl:"80",hdl:"59",tg:"124",ggt:"13",hba1c:"5.7"},since:todayStr()};
+    if(!user) return;
+    const basic={birthYear:"1979",height:"169",targetWeight:""};
+    const checkup={sys:"125",dia:"76",ldl:"80",hdl:"59",tg:"124",ggt:"13",hba1c:"5.7"};
     const rl=genRealData();
-    await storage.set(K.prof,JSON.stringify(prof));
-    await storage.set(K.logs,JSON.stringify(rl));
-    setProf(prof);setBasic(prof.basic);setChk(prof.checkup);setLogs(rl);setView("input");
+    await supabase.from("profiles").upsert({id:user.id,basic,checkup});
+    const logsToInsert=rl.map(l=>({user_id:user.id,date:l.date,weight:l.weight,tags:l.tags,cond:l.cond}));
+    await supabase.from("logs").upsert(logsToInsert,{onConflict:"user_id,date"});
+    setBasic(basic);setChk(checkup);setLogs(rl);setView("input");
   }
 
   async function saveBasic(){
-    const prof={basic,checkup,since:todayStr()};
-    await storage.set(K.prof,JSON.stringify(prof));
-    setProf(prof);setView("setup_checkup");
+    if(!user) return;
+    await supabase.from("profiles").upsert({id:user.id,basic,checkup});
+    setProf({basic,checkup});setView("setup_checkup");
   }
 
   async function saveCheckup(){
-    const prof={...profile,checkup};
-    await storage.set(K.prof,JSON.stringify(prof));
-    setProf(prof);setView("input");
+    if(!user) return;
+    await supabase.from("profiles").upsert({id:user.id,basic,checkup});
+    setProf({...profile,checkup});setView("input");
   }
 
   async function saveLog(){
+    if(!user) return;
     const w=parseFloat(weight);
     if(isNaN(w)||w<30||w>200) return;
+    await supabase.from("logs").upsert(
+      {user_id:user.id,date:todayStr(),weight:w,tags:selTags,cond},
+      {onConflict:"user_id,date"}
+    );
     const log={date:todayStr(),weight:w,tags:selTags,cond};
     const nl=[...logs.filter(l=>l.date!==todayStr()),log].sort((a,b)=>a.date.localeCompare(b.date));
-    await storage.set(K.logs,JSON.stringify(nl));
     setLogs(nl);setView("dashboard");
   }
 
   async function resetAll(){
-    await storage.delete(K.prof).catch(()=>{});
-    await storage.delete(K.logs).catch(()=>{});
+    if(!user) return;
+    await supabase.from("logs").delete().eq("user_id",user.id);
+    await supabase.from("profiles").delete().eq("id",user.id);
     setProf(null);setLogs([]);setAi({text:"",loading:false});
     setBasic({birthYear:"",height:"",targetWeight:""});
     setChk({sys:"",dia:"",ldl:"",hdl:"",tg:"",ggt:"",hba1c:""});
     setView("welcome");
+  }
+
+  async function handleLogout(){
+    await supabase.auth.signOut();
+    setUser(null);setProf(null);setLogs([]);
   }
 
   async function analyze(){
@@ -446,6 +474,7 @@ export default function App() {
   };
 
   if(view==="loading") return <div style={{...s.page,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#aaa"}}>読み込み中…</div></div>;
+  if(view==="auth") return <Auth />;
 
   if(view==="welcome") return (
     <div style={{...s.page,display:"flex",flexDirection:"column"}}>
@@ -555,7 +584,10 @@ export default function App() {
     <div style={s.page}>
       <div style={s.header}>
         <div style={s.appName}>カラダトリセツ</div>
-        <button style={{...s.ghostBtn,background:TEAL,color:"#fff"}} onClick={()=>{setTags([]);setWeight("");setCond("");setView("input");}}>今日を記録</button>
+        <div style={{display:"flex",gap:8}}>
+          <button style={{...s.ghostBtn,background:TEAL,color:"#fff"}} onClick={()=>{setTags([]);setWeight("");setCond("");setView("input");}}>今日を記録</button>
+          <button style={s.ghostBtn} onClick={handleLogout}>ログアウト</button>
+        </div>
       </div>
       <div style={s.body}>
         <div style={{fontSize:12,color:"#aaa",marginBottom:14}}>
