@@ -62,30 +62,79 @@ function calcPersonalWeights(logs) {
 
 // ── コンディションスコア（7日ローリング） ──────────────────────────
 function calcConditionScore(logs, weights) {
-  const recent=logs.slice(-8);
-  if(recent.length<2) return {score:5.0,level:"計測中",scoreColor:"#888",scoreBg:"#f0f0f0"};
+  if(logs.length < 2) return {level:"計測中", scoreColor:"#888", scoreBg:"#f0f0f0", reason:""};
 
-  // 体重トレンド（7日）
-  const wDelta=+(recent[recent.length-1].weight-recent[0].weight).toFixed(1);
+  // 残存負荷の定義（日数ごとの残存率）
+  const DECAY = {
+    drinking:   [1.0, 0.4, 0.0],
+    ramen:      [1.0, 0.0],
+    late_meal:  [1.0, 0.0],
+    eating_out: [1.0, 0.0],
+    stress:     [1.0, 0.75, 0.5, 0.0],
+    trip:       [1.0, 0.6, 0.0],
+    meeting:    [1.0, 0.3, 0.0],
+    poor_sleep: [1.0, 0.4, 0.0],
+    exercise:   [-1.0, -0.4, 0.0],
+    good_sleep: [-1.0, -0.5, 0.0],
+  };
 
-  // 行動スコア（パーソナルウエイト優先・デフォルトフォールバック）
-  let bScore=0;
-  recent.forEach(log=>{
-    (log.tags||[]).forEach(id=>{
-      const pw=weights[id];
-      if(pw?.calibrated) bScore+=pw.delta;
-      else { const t=TAGS.find(x=>x.id===id); bScore+=(t?.dmg||0)*0.15; }
+  const DEFAULT_DMG = {
+    drinking:3, ramen:2, late_meal:2, eating_out:2,
+    stress:4, trip:3, meeting:2, poor_sleep:3,
+    exercise:-2, good_sleep:-3,
+  };
+
+  const today = new Date();
+  let totalLoad = 0;
+
+  // 直近7日のログを処理
+  const recent = logs.slice(-7);
+  recent.forEach(log => {
+    const logDate = new Date(log.date + "T00:00:00");
+    const daysAgo = Math.floor((today - logDate) / (1000*60*60*24));
+    (log.tags||[]).forEach(id => {
+      const decay = DECAY[id] || [1.0, 0.0];
+      const dmg = weights[id]?.calibrated
+        ? Math.abs(weights[id].delta) * (weights[id].delta > 0 ? 1 : -1)
+        : DEFAULT_DMG[id] || 0;
+      const rate = daysAgo < decay.length ? decay[daysAgo] : 0;
+      totalLoad += dmg * rate;
     });
   });
 
-  // 合成：体重トレンド（主）＋行動スコア（副）
-  const raw=wDelta*2+bScore*0.5;
-  const score=+Math.max(0,Math.min(10,5+raw*1.5)).toFixed(1);
-  const [level,scoreColor,scoreBg]=
-    score<=3.5?["良好",TEAL,TEAL_BG]:
-    score<=6.5?["注意",AMBER,AMBER_BG]:
-               ["要回復",RED,RED_BG];
-  return {score,level,scoreColor,scoreBg};
+  // 体重トレンド補正
+  if(recent.length >= 4){
+    const h1 = recent.slice(0, Math.floor(recent.length/2));
+    const h2 = recent.slice(Math.floor(recent.length/2));
+    const avg = arr => arr.reduce((a,l)=>a+l.weight,0)/arr.length;
+    const delta = avg(h2) - avg(h1);
+    if(delta > 0.3) totalLoad += 1;
+    else if(delta < -0.3) totalLoad -= 1;
+  }
+
+  // 直前3日の負荷トレンド（回復中判定）
+  const prev3 = logs.slice(-6, -3);
+  const curr3 = logs.slice(-3);
+  const loadOf = arr => arr.reduce((a,l)=>a+((l.tags||[]).reduce((s,id)=>s+(DEFAULT_DMG[id]||0),0)),0);
+  const isRecovering = prev3.length >= 2 && loadOf(curr3) < loadOf(prev3);
+
+  // ステート判定
+  let level, scoreColor, scoreBg, reason;
+  if(totalLoad <= 1){
+    level="安定"; scoreColor=TEAL; scoreBg=TEAL_BG;
+    reason="負荷が低く、良いリズムです";
+  } else if(isRecovering){
+    level="回復中"; scoreColor="#2563eb"; scoreBg="#eff6ff";
+    reason="最近の負荷が落ち着いてきています";
+  } else if(totalLoad <= 6){
+    level="負荷高め"; scoreColor=AMBER; scoreBg=AMBER_BG;
+    reason="負荷の蓄積が見られます";
+  } else {
+    level="要リセット"; scoreColor=RED; scoreBg=RED_BG;
+    reason="高負荷が続いています。意識的に回復を";
+  }
+
+  return {level, scoreColor, scoreBg, reason};
 }
 
 // ── AI用統計サマリー構築 ─────────────────────────────────────────
@@ -603,10 +652,9 @@ export default function App() {
             {toTarget!==null&&toTarget<=0&&<div style={{fontSize:11,color:TEAL,marginTop:2}}>目標達成 ✓</div>}
           </div>
           <div style={{...s.card,background:scoreBg,borderColor:scoreColor+"44"}}>
-            <div style={{...s.lbl,color:scoreColor}}>コンディション</div>
+            <div style={{...s.lbl,color:scoreColor}}>今日の状態</div>
             <div style={{...s.bigNum,color:scoreColor}}>{level}</div>
-            <div style={{fontSize:20,fontWeight:600,color:scoreColor,marginTop:4}}>{score}<span style={{fontSize:12,fontWeight:400}}> / 10</span></div>
-            <div style={{fontSize:10,color:scoreColor,opacity:0.7,marginTop:2}}>7日ローリング</div>
+            <div style={{fontSize:11,color:scoreColor,opacity:0.8,marginTop:6,lineHeight:1.5}}>{reason}</div>
           </div>
           <div style={s.card}>
             <div style={s.lbl}>記録日数</div>
