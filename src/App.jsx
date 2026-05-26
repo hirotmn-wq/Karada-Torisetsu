@@ -708,9 +708,6 @@ export default function App() {
             <div style={s.lbl}>今日の体重</div>
             <div style={s.bigNum}>{currentW??"—"}<span style={{fontSize:14,fontWeight:400}}> kg</span></div>
             {diff!==null&&<div style={{fontSize:12,marginTop:4,color:diff>0?RED:diff<0?TEAL:"#aaa"}}>{diff>0?"+":(diff<0?"":"±")}{diff}kg</div>}
-            {bmi&&<div style={{fontSize:12,marginTop:5,color:bmiColor,fontWeight:500}}>BMI {bmi} {bmiLabel}</div>}
-            {toTarget!==null&&toTarget>0&&<div style={{fontSize:11,color:"#aaa",marginTop:2}}>目標まで -{toTarget}kg</div>}
-            {toTarget!==null&&toTarget<=0&&<div style={{fontSize:11,color:TEAL,marginTop:2}}>目標達成 ✓</div>}
           </div>
           <div style={{...s.card,background:scoreBg,borderColor:scoreColor+"44"}}>
             <div style={{...s.lbl,color:scoreColor}}>今日の状態</div>
