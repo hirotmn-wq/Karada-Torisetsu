@@ -386,12 +386,17 @@ export default function App() {
       } catch(e){ setView("auth"); }
     })();
 
-    const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
-      if(event==="SIGNED_IN"){
-        const u = session?.user ?? null;
-        if(u){ setUser(u); await loadData(u); }
-      } else if(event==="SIGNED_OUT"){
-        setUser(null); setView("auth");
+const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
+      try {
+        if(event==="SIGNED_IN"){
+          const u = session?.user ?? null;
+          if(u){ setUser(u); await loadData(u); }
+        } else if(event==="SIGNED_OUT"){
+          setUser(null); setView("auth");
+        }
+      } catch(e){
+        console.error("auth error:", e);
+        setView("welcome");
       }
     });
     return ()=>subscription.unsubscribe();
