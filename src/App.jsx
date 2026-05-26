@@ -62,6 +62,7 @@ function calcPersonalWeights(logs) {
 
 // ── コンディションスコア（7日ローリング） ──────────────────────────
 function calcConditionScore(logs, weights) {
+  console.log("calcConditionScore called", logs.length);
   if(logs.length < 2) return {level:"計測中", scoreColor:"#888", scoreBg:"#f0f0f0", reason:""};
 
   // 残存負荷の定義（日数ごとの残存率）
