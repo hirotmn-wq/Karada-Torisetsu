@@ -17,10 +17,10 @@ const TAGS = [
 ];
 
 const COND_OPTS = [
-  {v:"great",e:"😄",l:"絶好調",c:"#1D9E75",bg:"#e1f5ee"},
-  {v:"good", e:"😊",l:"まあ良い",c:"#2563eb",bg:"#eff6ff"},
-  {v:"bad",  e:"😕",l:"まあ悪い",c:"#d97706",bg:"#fef3c7"},
-  {v:"worst",e:"😔",l:"最悪",    c:"#c0392b",bg:"#fce8e8"},
+  {v:"great",e:"💪",l:"キレあり", c:"#1D9E75",bg:"#e1f5ee"},
+  {v:"good", e:"😐",l:"普通",    c:"#2563eb",bg:"#eff6ff"},
+  {v:"bad",  e:"😮‍💨",l:"だるい",  c:"#d97706",bg:"#fef3c7"},
+  {v:"worst",e:"💀",l:"限界",    c:"#c0392b",bg:"#fce8e8"},
 ];
 
 // サンプル数の最低閾値
