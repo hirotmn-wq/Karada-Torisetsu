@@ -639,7 +639,6 @@ export default function App() {
       <div style={s.body}>
         <div style={{fontSize:12,color:"#aaa",marginBottom:14}}>
           {new Date().toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"short"})}
-          {age&&<span style={{marginLeft:10}}>・{age}歳</span>}
         </div>
 
         {/* メトリクス */}
