@@ -85,7 +85,6 @@ function calcPersonalWeights(logs) {
 
 // ── コンディションスコア（7日ローリング） ──────────────────────────
 function calcConditionScore(logs, weights) {
-  console.log("calcConditionScore called", logs.length);
   if(logs.length < 2) return {level:"計測中", scoreColor:"#888", scoreBg:"#f0f0f0", reason:""};
 const COMBOS = [
     {tags:["drinking","poor_sleep"], mod:1.5},
@@ -170,7 +169,6 @@ const COMBOS = [
     level="要リセット"; scoreColor=RED; scoreBg=RED_BG;
     reason="高負荷が続いています。意識的に回復を";
   }
-console.log("condition:", {level, scoreColor, reason, totalLoad});
   return {level, scoreColor, scoreBg, reason};
 }
 
