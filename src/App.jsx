@@ -87,7 +87,19 @@ function calcPersonalWeights(logs) {
 function calcConditionScore(logs, weights) {
   console.log("calcConditionScore called", logs.length);
   if(logs.length < 2) return {level:"計測中", scoreColor:"#888", scoreBg:"#f0f0f0", reason:""};
-
+const COMBOS = [
+    {tags:["drinking","poor_sleep"], mod:1.5},
+    {tags:["drinking","stress"],     mod:1.4},
+    {tags:["trip","drinking"],       mod:1.4},
+    {tags:["trip","stress"],         mod:1.3},
+    {tags:["trip","poor_sleep"],     mod:1.3},
+    {tags:["good_sleep","exercise"], mod:0.7},
+    {tags:["good_sleep","poor_sleep"],mod:0.8},
+  ];
+  const comboMod = log => {
+    const t = log.tags||[];
+    return COMBOS.reduce((m,c)=>c.tags.every(x=>t.includes(x))?Math.max(m,c.mod):m, 1.0);
+  };
   // 残存負荷の定義（日数ごとの残存率）
   const DECAY = {
     drinking:   [1.0, 0.4, 0.0],
@@ -116,13 +128,14 @@ function calcConditionScore(logs, weights) {
   recent.forEach(log => {
     const logDate = new Date(log.date + "T00:00:00");
     const daysAgo = Math.floor((today - logDate) / (1000*60*60*24));
+    const mod = comboMod(log);
     (log.tags||[]).forEach(id => {
       const decay = weights[id]?.decayProfile || DECAY[id] || [1.0, 0.0];
       const dmg = weights[id]?.calibrated
         ? Math.abs(weights[id].delta) * (weights[id].delta > 0 ? 1 : -1)
         : DEFAULT_DMG[id] || 0;
       const rate = daysAgo < decay.length ? decay[daysAgo] : 0;
-      totalLoad += dmg * rate;
+      totalLoad += dmg * rate * mod;
     });
   });
 
