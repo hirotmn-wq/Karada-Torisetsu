@@ -704,13 +704,9 @@ export default function App() {
 
 {/* 状態カード（全幅） */}
         <div style={{...s.card,background:scoreBg,borderColor:scoreColor+"44",marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{...s.lbl,color:scoreColor}}>今日の状態</div>
-              <div style={{...s.bigNum,color:scoreColor}}>{level}</div>
-            </div>
-            <div style={{fontSize:13,color:scoreColor,opacity:0.8,textAlign:"right",maxWidth:200,lineHeight:1.5}}>{reason}</div>
-          </div>
+          <div style={{...s.lbl,color:scoreColor}}>今日の状態</div>
+          <div style={{...s.bigNum,color:scoreColor,marginBottom:6}}>{level}</div>
+          <div style={{fontSize:13,color:scoreColor,opacity:0.8,lineHeight:1.5}}>{reason}</div>
         </div>
 
         {/* 体重・記録日数（2列） */}
