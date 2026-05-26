@@ -448,7 +448,7 @@ export default function App() {
   const prevLog=logs.filter(l=>l.date!==today).slice(-1)[0];
   const diff=todayLog&&prevLog?+(todayLog.weight-prevLog.weight).toFixed(1):null;
   const personalWeights=calcPersonalWeights(logs);
-  const {score,level,scoreColor,scoreBg}=calcConditionScore(logs,personalWeights);
+  const {level,scoreColor,scoreBg,reason}=calcConditionScore
   const trendDirs=calcTrendDir(logs,checkup);
   const chartData = (() => {
     if(chartPeriod==="week"){
