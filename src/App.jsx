@@ -705,15 +705,16 @@ export default function App() {
         {/* メトリクス */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
           <div style={s.card}>
-            <div style={s.lbl}>今日の体重</div>
-            <div style={s.bigNum}>{currentW??"—"}<span style={{fontSize:14,fontWeight:400}}> kg</span></div>
-            {diff!==null&&<div style={{fontSize:12,marginTop:4,color:diff>0?RED:diff<0?TEAL:"#aaa"}}>{diff>0?"+":(diff<0?"":"±")}{diff}kg</div>}
-          </div>
           <div style={{...s.card,background:scoreBg,borderColor:scoreColor+"44"}}>
             <div style={{...s.lbl,color:scoreColor}}>今日の状態</div>
             <div style={{...s.bigNum,color:scoreColor}}>{level}</div>
             <div style={{fontSize:11,color:scoreColor,opacity:0.8,marginTop:6,lineHeight:1.5}}>{reason}</div>
           </div>
+            <div style={s.lbl}>今日の体重</div>
+            <div style={s.bigNum}>{currentW??"—"}<span style={{fontSize:14,fontWeight:400}}> kg</span></div>
+            {diff!==null&&<div style={{fontSize:12,marginTop:4,color:diff>0?RED:diff<0?TEAL:"#aaa"}}>{diff>0?"+":(diff<0?"":"±")}{diff}kg</div>}
+          </div>
+
           <div style={s.card}>
             <div style={s.lbl}>記録日数</div>
             <div style={s.bigNum}>{logs.length}<span style={{fontSize:14,fontWeight:400}}> 日</span></div>
