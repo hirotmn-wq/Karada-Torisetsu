@@ -5,13 +5,15 @@ import Auth from "./Auth.jsx";
 
 
 const TAGS = [
-  {id:"drinking",  label:"飲酒",    dmg:3,  icon:"🍺"},
-  {id:"eating_out",label:"会食",    dmg:2,  icon:"🍽"},
-  {id:"fried",     label:"揚げ物",  dmg:2,  icon:"🍟"},
-  {id:"ramen",     label:"ラーメン",dmg:2,  icon:"🍜"},
-  {id:"exercise",  label:"運動",    dmg:-3, icon:"💪"},
-  {id:"poor_sleep",label:"睡眠不足",dmg:2,  icon:"😴"},
-  {id:"late_meal", label:"夜食",    dmg:2,  icon:"🌙"},
+  {id:"eating_out",label:"会食",    dmg:2,  icon:"🍽", cat:"仕事系"},
+  {id:"stress",    label:"修羅場",  dmg:4,  icon:"🔥", cat:"仕事系"},
+  {id:"trip",      label:"出張",    dmg:3,  icon:"✈️", cat:"仕事系"},
+  {id:"drinking",  label:"飲酒",    dmg:3,  icon:"🍺", cat:"食事系"},
+  {id:"ramen",     label:"ラーメン", dmg:2,  icon:"🍜", cat:"食事系"},
+  {id:"late_meal", label:"夜食",    dmg:2,  icon:"🌙", cat:"食事系"},
+  {id:"exercise",  label:"運動",    dmg:-3, icon:"💪", cat:"体調系"},
+  {id:"good_sleep",label:"よく寝た",dmg:-2, icon:"😴", cat:"体調系"},
+  {id:"poor_sleep",label:"寝不足",  dmg:3,  icon:"😪", cat:"体調系"},
 ];
 
 const COND_OPTS = [
@@ -652,11 +654,22 @@ export default function App() {
         </div>
         <div style={s.card}>
           <div style={s.lbl}>昨日の行動（複数選択可）</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:4}}>
-            {TAGS.map(t=>{const sel=selTags.includes(t.id),good=t.dmg<0;
-              return <button key={t.id} style={s.tagBtn(sel,good)} onClick={()=>setTags(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])}><span>{t.icon}</span>{t.label}</button>;
-            })}
-          </div>
+          
+<div style={s.lbl}>昨日の負荷と回復</div>
+{["仕事系","食事系","体調系"].map(cat=>(
+  <div key={cat} style={{marginBottom:10}}>
+    <div style={{fontSize:10,color:"#aaa",marginBottom:5}}>{cat}</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+      {TAGS.filter(t=>t.cat===cat).map(t=>{
+        const sel=selTags.includes(t.id), good=t.dmg<0;
+        return <button key={t.id} style={s.tagBtn(sel,good)}
+          onClick={()=>setTags(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])}>
+          <span>{t.icon}</span>{t.label}
+        </button>;
+      })}
+    </div>
+  </div>
+))}
         </div>
         <button style={{...s.btn,opacity:weight?1:0.4}} onClick={saveLog} disabled={!weight}>記録する →</button>
       </div>
