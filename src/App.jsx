@@ -376,12 +376,25 @@ export default function App() {
   const [personalWeights, setPersonalWeights] = useState({});
 
   useEffect(()=>{
-    supabase.auth.getSession().then(({data:{session}})=>{
-      const u=session?.user??null;
-      setUser(u);
-      if(!u){setView("auth");return;}
-      loadData(u);
-    }).catch(()=>setView("auth"));
+    (async()=>{
+      try {
+        const { data:{ session } } = await supabase.auth.getSession();
+        const u = session?.user ?? null;
+        setUser(u);
+        if(!u){ setView("auth"); return; }
+        await loadData(u);
+      } catch(e){ setView("auth"); }
+    })();
+
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
+      if(event==="SIGNED_IN"){
+        const u = session?.user ?? null;
+        if(u){ setUser(u); await loadData(u); }
+      } else if(event==="SIGNED_OUT"){
+        setUser(null); setView("auth");
+      }
+    });
+    return ()=>subscription.unsubscribe();
   },[]);
 
   async function loadData(currentUser) {
