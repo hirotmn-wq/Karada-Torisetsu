@@ -133,7 +133,7 @@ function calcConditionScore(logs, weights) {
     level="要リセット"; scoreColor=RED; scoreBg=RED_BG;
     reason="高負荷が続いています。意識的に回復を";
   }
-
+console.log("condition:", {level, scoreColor, reason, totalLoad});
   return {level, scoreColor, scoreBg, reason};
 }
 
