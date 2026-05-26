@@ -339,6 +339,7 @@ export default function App() {
   const [checkup,setChk]   = useState({sys:"",dia:"",ldl:"",hdl:"",tg:"",ggt:"",hba1c:""});
   const [ai,     setAi]    = useState({text:"",loading:false});
   const [chartPeriod, setChartPeriod] = useState("14d");
+  const [personalWeights, setPersonalWeights] = useState({});
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -360,6 +361,16 @@ export default function App() {
       setLogs(ls);
       if(prof?.basic) setBasic(prof.basic);
       if(prof?.checkup) setChk(prof.checkup);
+       // パーソナルウエイトの読み込み・必要なら再計算
+      const savedWeights = prof?.personal_weights || {};
+      const savedCount = prof?.weights_log_count || 0;
+      if(ls.length - savedCount >= 10 || Object.keys(savedWeights).length === 0){
+        const newWeights = calcPersonalWeights(ls);
+        setPersonalWeights(newWeights);
+        await supabase.from("profiles").upsert({id:currentUser.id, basic:prof?.basic||{}, checkup:prof?.checkup||{}, personal_weights:newWeights, weights_log_count:ls.length});
+      } else {
+        setPersonalWeights(savedWeights);
+      }
       setView(!prof ? "welcome" : !ls.find(x=>x.date===todayStr()) ? "input" : "dashboard");
     } catch {
       setView("welcome");
@@ -399,6 +410,12 @@ export default function App() {
     );
     const log={date:todayStr(),weight:w,tags:selTags,cond};
     const nl=[...logs.filter(l=>l.date!==todayStr()),log].sort((a,b)=>a.date.localeCompare(b.date));
+    // 10件ごとにウエイト再計算
+      if(nl.length - (profile?.weights_log_count||0) >= 10){
+        const newWeights = calcPersonalWeights(nl);
+        setPersonalWeights(newWeights);
+        await supabase.from("profiles").upsert({id:user.id, basic, checkup, personal_weights:newWeights, weights_log_count:nl.length});
+      }
     setLogs(nl);setView("dashboard");
   }
 
@@ -448,7 +465,6 @@ export default function App() {
   const todayLog=logs.find(l=>l.date===today);
   const prevLog=logs.filter(l=>l.date!==today).slice(-1)[0];
   const diff=todayLog&&prevLog?+(todayLog.weight-prevLog.weight).toFixed(1):null;
-  const personalWeights=calcPersonalWeights(logs);
   const {level,scoreColor,scoreBg,reason}=calcConditionScore(logs,personalWeights);
   const trendDirs=calcTrendDir(logs,checkup);
   const chartData = (() => {
