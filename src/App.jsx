@@ -375,28 +375,15 @@ export default function App() {
   const [chartPeriod, setChartPeriod] = useState("14d");
   const [personalWeights, setPersonalWeights] = useState({});
 
-  useEffect(()=>{
-    (async()=>{
-      try {
-        const { data:{ session } } = await supabase.auth.getSession();
+useEffect(()=>{
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
+      if(["INITIAL_SESSION","SIGNED_IN","TOKEN_REFRESHED"].includes(event)){
         const u = session?.user ?? null;
         setUser(u);
         if(!u){ setView("auth"); return; }
-        await loadData(u);
-      } catch(e){ setView("auth"); }
-    })();
-
-const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
-      try {
-        if(event==="SIGNED_IN"){
-          const u = session?.user ?? null;
-          if(u){ setUser(u); await loadData(u); }
-        } else if(event==="SIGNED_OUT"){
-          setUser(null); setView("auth");
-        }
-      } catch(e){
-        console.error("auth error:", e);
-        setView("welcome");
+        try{ await loadData(u); }catch(e){ setView("welcome"); }
+      } else if(event==="SIGNED_OUT"){
+        setUser(null); setView("auth");
       }
     });
     return ()=>subscription.unsubscribe();
