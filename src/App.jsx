@@ -32,6 +32,28 @@ const todayStr = () => new Date().toISOString().split("T")[0];
 const fmtDate  = d => { const x=new Date(d+"T00:00:00"); return `${x.getMonth()+1}/${x.getDate()}`; };
 
 // ── パーソナルウエイト計算（指数減衰・サンプル閾値） ──────────────
+function calcDecayProfile(logs, tagId, maxDays=4) {
+  const dayDeltas = Array(maxDays).fill(0).map(()=>[]);
+  logs.forEach((log,i)=>{
+    if(!(log.tags||[]).includes(tagId)) return;
+    for(let d=1;d<=maxDays;d++){
+      if(i+d>=logs.length) break;
+      const next=logs[i+d];
+      const gap=Math.floor((new Date(next.date+"T00:00:00")-new Date(log.date+"T00:00:00"))/(1000*60*60*24));
+      if(gap!==d) break;
+      dayDeltas[d-1].push(next.weight-log.weight);
+    }
+  });
+  const avgs=dayDeltas.map(arr=>arr.length>=2?+(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2):null);
+  if(!avgs[0]||avgs[0]<=0) return null;
+  const profile=[1.0];
+  for(let d=1;d<maxDays;d++){
+    if(avgs[d]===null||avgs[d]<=0){profile.push(0.0);break;}
+    profile.push(+Math.max(0,avgs[d]/avgs[0]).toFixed(2));
+  }
+  return profile;
+}
+
 function calcPersonalWeights(logs) {
   const now = new Date();
   const result = {};
@@ -44,7 +66,7 @@ function calcPersonalWeights(logs) {
       const daysAgo=Math.floor((now-logDate)/(1000*60*60*24));
       if(daysAgo>90) continue;
       const gap=Math.floor((logDate-new Date(prev.date+"T00:00:00"))/(1000*60*60*24));
-      if(gap>2) continue; // 空白が大きい日はスキップ
+      if(gap>2) continue;
       const decay=daysAgo<=30?1.0:daysAgo<=60?0.6:0.3;
       samples.push({delta:+(log.weight-prev.weight).toFixed(2), decay});
     }
@@ -52,7 +74,8 @@ function calcPersonalWeights(logs) {
     if(samples.length>=minN) {
       const td=samples.reduce((a,s)=>a+s.decay,0);
       const wd=samples.reduce((a,s)=>a+s.delta*s.decay,0)/td;
-      result[tag.id]={delta:+wd.toFixed(2), sampleN:samples.length, calibrated:true};
+      const decayProfile=calcDecayProfile(logs, tag.id);
+      result[tag.id]={delta:+wd.toFixed(2), sampleN:samples.length, calibrated:true, decayProfile};
     } else {
       result[tag.id]={delta:null, sampleN:samples.length, calibrated:false, needed:minN-samples.length};
     }
@@ -94,7 +117,7 @@ function calcConditionScore(logs, weights) {
     const logDate = new Date(log.date + "T00:00:00");
     const daysAgo = Math.floor((today - logDate) / (1000*60*60*24));
     (log.tags||[]).forEach(id => {
-      const decay = DECAY[id] || [1.0, 0.0];
+      const decay = weights[id]?.decayProfile || DECAY[id] || [1.0, 0.0];
       const dmg = weights[id]?.calibrated
         ? Math.abs(weights[id].delta) * (weights[id].delta > 0 ? 1 : -1)
         : DEFAULT_DMG[id] || 0;
