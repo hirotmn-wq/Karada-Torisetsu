@@ -33,25 +33,23 @@ const fmtDate  = d => { const x=new Date(d+"T00:00:00"); return `${x.getMonth()+
 
 // ── パーソナルウエイト計算（指数減衰・サンプル閾値） ──────────────
 function calcDecayProfile(logs, tagId, maxDays=4) {
-  const dayDeltas = Array(maxDays).fill(0).map(()=>[]);
-  logs.forEach((log,i)=>{
-    if(!(log.tags||[]).includes(tagId)) return;
-    for(let d=1;d<=maxDays;d++){
-      if(i+d>=logs.length) break;
+  const relativeElevations = Array(maxDays).fill(0).map(()=>[]);
+  for(let i=1; i<logs.length; i++){
+    const log=logs[i], prev=logs[i-1];
+    if(!(log.tags||[]).includes(tagId)) continue;
+    const day0 = log.weight - prev.weight;
+    if(day0 <= 0.1) continue;
+    for(let d=1; d<=maxDays; d++){
+      if(i+d >= logs.length) break;
       const next=logs[i+d];
       const gap=Math.floor((new Date(next.date+"T00:00:00")-new Date(log.date+"T00:00:00"))/(1000*60*60*24));
-      if(gap!==d) break;
-      dayDeltas[d-1].push(next.weight-log.weight);
+      if(gap !== d) break;
+      relativeElevations[d-1].push(Math.max(0,(next.weight-prev.weight)/day0));
     }
-  });
-  const avgs=dayDeltas.map(arr=>arr.length>=2?+(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2):null);
-  if(!avgs[0]||avgs[0]<=0) return null;
-  const profile=[1.0];
-  for(let d=1;d<maxDays;d++){
-    if(avgs[d]===null||avgs[d]<=0){profile.push(0.0);break;}
-    profile.push(+Math.max(0,avgs[d]/avgs[0]).toFixed(2));
   }
-  return profile;
+  const avgs=relativeElevations.map(arr=>arr.length>=2?+(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2):null);
+  if(avgs[0]===null) return null;
+  return [1.0, ...avgs.filter(a=>a!==null)];
 }
 
 function calcPersonalWeights(logs) {
