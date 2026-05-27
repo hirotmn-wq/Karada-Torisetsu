@@ -222,55 +222,6 @@ function buildStatsForAI(logs, weights, basic) {
   return lines.join("\n");
 }
 
-// ── 実データ ─────────────────────────────────────────────────────
-function genRealData() {
-  return [
-    {date:"2026-04-01",weight:69.2,tags:[],cond:""},
-    {date:"2026-04-02",weight:67.9,tags:["drinking","eating_out"],cond:""},
-    {date:"2026-04-03",weight:68.7,tags:[],cond:""},
-    {date:"2026-04-05",weight:70.1,tags:["drinking"],cond:""},
-    {date:"2026-04-06",weight:69.5,tags:[],cond:""},
-    {date:"2026-04-07",weight:68.5,tags:["drinking","eating_out"],cond:""},
-    {date:"2026-04-08",weight:67.9,tags:[],cond:""},
-    {date:"2026-04-09",weight:68.2,tags:[],cond:""},
-    {date:"2026-04-11",weight:68.7,tags:["drinking"],cond:""},
-    {date:"2026-04-12",weight:69.9,tags:["drinking"],cond:""},
-    {date:"2026-04-13",weight:68.8,tags:[],cond:""},
-    {date:"2026-04-14",weight:68.6,tags:[],cond:""},
-    {date:"2026-04-15",weight:67.9,tags:[],cond:""},
-    {date:"2026-04-16",weight:67.7,tags:[],cond:""},
-    {date:"2026-04-17",weight:67.9,tags:[],cond:""},
-    {date:"2026-04-18",weight:69.2,tags:["drinking"],cond:""},
-    {date:"2026-04-19",weight:70.0,tags:["drinking"],cond:""},
-    {date:"2026-04-20",weight:68.1,tags:[],cond:""},
-    {date:"2026-04-21",weight:67.8,tags:[],cond:""},
-    {date:"2026-04-22",weight:67.3,tags:[],cond:""},
-    {date:"2026-04-23",weight:67.4,tags:[],cond:""},
-    {date:"2026-04-24",weight:67.5,tags:[],cond:""},
-    {date:"2026-04-26",weight:68.4,tags:["drinking"],cond:""},
-    {date:"2026-04-27",weight:67.9,tags:[],cond:""},
-    {date:"2026-04-29",weight:68.5,tags:["drinking"],cond:""},
-    {date:"2026-04-30",weight:67.6,tags:["drinking"],cond:""},
-    {date:"2026-05-01",weight:68.0,tags:["drinking"],cond:""},
-    {date:"2026-05-02",weight:68.7,tags:["drinking"],cond:""},
-    {date:"2026-05-06",weight:68.0,tags:["drinking"],cond:""},
-    {date:"2026-05-07",weight:67.0,tags:[],cond:""},
-    {date:"2026-05-09",weight:67.9,tags:["drinking"],cond:""},
-    {date:"2026-05-10",weight:68.7,tags:["drinking","eating_out"],cond:""},
-    {date:"2026-05-11",weight:68.0,tags:[],cond:""},
-    {date:"2026-05-12",weight:67.3,tags:[],cond:""},
-    {date:"2026-05-13",weight:66.8,tags:[],cond:""},
-    {date:"2026-05-14",weight:67.6,tags:[],cond:""},
-    {date:"2026-05-16",weight:69.0,tags:["drinking"],cond:""},
-    {date:"2026-05-18",weight:68.9,tags:[],cond:""},
-    {date:"2026-05-19",weight:67.0,tags:[],cond:""},
-    {date:"2026-05-20",weight:66.5,tags:[],cond:""},
-    {date:"2026-05-21",weight:66.8,tags:[],cond:""},
-    {date:"2026-05-22",weight:66.9,tags:[],cond:""},
-    {date:"2026-05-24",weight:67.6,tags:["drinking"],cond:""},
-    {date:"2026-05-25",weight:67.6,tags:[],cond:""},
-  ];
-}
 
 
 // ── 危険予兆・好転サイン検出 ─────────────────────────────────────
@@ -397,13 +348,11 @@ useEffect(()=>{
 
  async function loadData(currentUser) {
   try {
-    console.log("loadData: start");
     const [profResult, logResult] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
       supabase.from("logs").select("*").eq("user_id", currentUser.id).order("date"),
     ]);
-    console.log("queries done", profResult?.error, logResult?.error);
-    const prof = profResult.data;
+        const prof = profResult.data;
     const logRows = logResult.data;
     const ls = (logRows || []).map(r => ({ date: r.date, weight: r.weight, tags: r.tags||[], cond: r.cond||"" }));
     setProf(prof);
@@ -421,21 +370,11 @@ useEffect(()=>{
     }
     setView(!prof ? "welcome" : !ls.find(x=>x.date===todayStr()) ? "input" : "dashboard");
   } catch(e) {
-    console.error("loadData error:", e);
+
     setView("welcome");
   }
 }
 
-  async function loadRealData(){
-    if(!user) return;
-    const basic={birthYear:"1979",height:"169",targetWeight:""};
-    const checkup={sys:"125",dia:"76",ldl:"80",hdl:"59",tg:"124",ggt:"13",hba1c:"5.7"};
-    const rl=genRealData();
-    await supabase.from("profiles").upsert({id:user.id,basic,checkup});
-    const logsToInsert=rl.map(l=>({user_id:user.id,date:l.date,weight:l.weight,tags:l.tags,cond:l.cond}));
-    await supabase.from("logs").upsert(logsToInsert,{onConflict:"user_id,date"});
-    setBasic(basic);setChk(checkup);setLogs(rl);setView("input");
-  }
 
   async function saveBasic(){
     if(!user) return;
@@ -468,15 +407,6 @@ useEffect(()=>{
     setLogs(nl);setView("dashboard");
   }
 
-  async function resetAll(){
-    if(!user) return;
-    await supabase.from("logs").delete().eq("user_id",user.id);
-    await supabase.from("profiles").delete().eq("id",user.id);
-    setProf(null);setLogs([]);setAi({text:"",loading:false});
-    setBasic({birthYear:"",height:"",targetWeight:""});
-    setChk({sys:"",dia:"",ldl:"",hdl:"",tg:"",ggt:"",hba1c:""});
-    setView("welcome");
-  }
 
   async function handleLogout(){
     await supabase.auth.signOut();
@@ -602,7 +532,6 @@ useEffect(()=>{
           ))}
         </div>
         <button style={s.btn} onClick={()=>setView("setup_basic")}>はじめる →</button>
-        <button style={s.outlineBtn} onClick={loadRealData}>📥 実データをインポート</button>
       </div>
     </div>
   );
@@ -856,8 +785,7 @@ useEffect(()=>{
 
         <div style={{display:"flex",gap:8,marginTop:4}}>
           <button style={s.ghostBtn} onClick={()=>setView("setup_checkup")}>健診データを更新</button>
-          <button style={{...s.ghostBtn,color:RED,marginLeft:"auto"}} onClick={resetAll}>リセット</button>
-        </div>
+          </div>
       </div>
     </div>
   );
