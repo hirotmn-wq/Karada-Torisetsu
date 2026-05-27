@@ -376,45 +376,54 @@ export default function App() {
   const [personalWeights, setPersonalWeights] = useState({});
 
 useEffect(()=>{
-  console.log("useEffect: start");
+  let loaded = false;
 
-  supabase.auth.getSession().then(({ data, error })=>{
-    console.log("getSession result:", data?.session?.user?.id ?? "no user", error);
-  });
-
-  const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session)=>{
-    console.log("auth event:", event, session?.user?.id ?? "no user");
+  const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
+    if(event === "SIGNED_IN" && !loaded){
+      loaded = true;
+      const u = session?.user ?? null;
+      setUser(u);
+      if(!u){ setView("auth"); return; }
+      await loadData(u);
+    } else if(event === "SIGNED_OUT"){
+      loaded = false;
+      setUser(null); setView("auth");
+    }
   });
 
   return ()=>subscription.unsubscribe();
 },[]);
 
-  async function loadData(currentUser) {
-    try {
-      const [{ data: prof }, { data: logRows }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
-        supabase.from("logs").select("*").eq("user_id", currentUser.id).order("date"),
-      ]);
-      const ls = (logRows || []).map(r => ({ date: r.date, weight: r.weight, tags: r.tags||[], cond: r.cond||"" }));
-      setProf(prof);
-      setLogs(ls);
-      if(prof?.basic) setBasic(prof.basic);
-      if(prof?.checkup) setChk(prof.checkup);
-       // パーソナルウエイトの読み込み・必要なら再計算
-      const savedWeights = prof?.personal_weights || {};
-      const savedCount = prof?.weights_log_count || 0;
-      if(ls.length - savedCount >= 10 || Object.keys(savedWeights).length === 0){
-        const newWeights = calcPersonalWeights(ls);
-        setPersonalWeights(newWeights);
-        await supabase.from("profiles").upsert({id:currentUser.id, basic:prof?.basic||{}, checkup:prof?.checkup||{}, personal_weights:newWeights, weights_log_count:ls.length});
-      } else {
-        setPersonalWeights(savedWeights);
-      }
-      setView(!prof ? "welcome" : !ls.find(x=>x.date===todayStr()) ? "input" : "dashboard");
-    } catch {
-      setView("welcome");
+ async function loadData(currentUser) {
+  try {
+    console.log("loadData: start");
+    const [profResult, logResult] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
+      supabase.from("logs").select("*").eq("user_id", currentUser.id).order("date"),
+    ]);
+    console.log("queries done", profResult?.error, logResult?.error);
+    const prof = profResult.data;
+    const logRows = logResult.data;
+    const ls = (logRows || []).map(r => ({ date: r.date, weight: r.weight, tags: r.tags||[], cond: r.cond||"" }));
+    setProf(prof);
+    setLogs(ls);
+    if(prof?.basic) setBasic(prof.basic);
+    if(prof?.checkup) setChk(prof.checkup);
+    const savedWeights = prof?.personal_weights || {};
+    const savedCount = prof?.weights_log_count || 0;
+    if(ls.length - savedCount >= 10 || Object.keys(savedWeights).length === 0){
+      const newWeights = calcPersonalWeights(ls);
+      setPersonalWeights(newWeights);
+      await supabase.from("profiles").upsert({id:currentUser.id, basic:prof?.basic||{}, checkup:prof?.checkup||{}, personal_weights:newWeights, weights_log_count:ls.length});
+    } else {
+      setPersonalWeights(savedWeights);
     }
+    setView(!prof ? "welcome" : !ls.find(x=>x.date===todayStr()) ? "input" : "dashboard");
+  } catch(e) {
+    console.error("loadData error:", e);
+    setView("welcome");
   }
+}
 
   async function loadRealData(){
     if(!user) return;
