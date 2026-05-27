@@ -378,13 +378,14 @@ export default function App() {
 useEffect(()=>{
   let loaded = false;
 
-  const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
+  const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session)=>{
     if(event === "SIGNED_IN" && !loaded){
       loaded = true;
       const u = session?.user ?? null;
       setUser(u);
       if(!u){ setView("auth"); return; }
-      await loadData(u);
+      // ← ここがポイント：authコールバックの外に出す
+      setTimeout(()=>{ loadData(u); }, 0);
     } else if(event === "SIGNED_OUT"){
       loaded = false;
       setUser(null); setView("auth");
