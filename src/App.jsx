@@ -376,37 +376,17 @@ export default function App() {
   const [personalWeights, setPersonalWeights] = useState({});
 
 useEffect(()=>{
-  let done = false;
+  console.log("useEffect: start");
 
-  async function boot(u) {
-    if(done) return;
-    done = true;
-    setUser(u);
-    if(!u){ setView("auth"); return; }
-    try{ await loadData(u); }catch{ setView("welcome"); }
-  }
-
-  // SIGNED_INが先に来た場合
-  const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
-    if(["INITIAL_SESSION","SIGNED_IN","TOKEN_REFRESHED"].includes(event)){
-      await boot(session?.user ?? null);
-    } else if(event==="SIGNED_IN" && done){
-      // ログアウト後の再ログイン
-      done = false;
-      await boot(session?.user ?? null);
-    } else if(event==="SIGNED_OUT"){
-      done = false; setUser(null); setView("auth");
-    }
+  supabase.auth.getSession().then(({ data, error })=>{
+    console.log("getSession result:", data?.session?.user?.id ?? "no user", error);
   });
 
-  // フォールバック：2秒後もまだloadingなら手動チェック
-  const timer = setTimeout(async()=>{
-    if(done) return;
-    const { data:{ session } } = await supabase.auth.getSession();
-    await boot(session?.user ?? null);
-  }, 2000);
+  const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session)=>{
+    console.log("auth event:", event, session?.user?.id ?? "no user");
+  });
 
-  return ()=>{ subscription.unsubscribe(); clearTimeout(timer); };
+  return ()=>subscription.unsubscribe();
 },[]);
 
   async function loadData(currentUser) {
