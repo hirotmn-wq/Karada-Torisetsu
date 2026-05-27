@@ -376,23 +376,43 @@ export default function App() {
   const [personalWeights, setPersonalWeights] = useState({});
 
 useEffect(()=>{
-    const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
-      if(["INITIAL_SESSION","SIGNED_IN","TOKEN_REFRESHED"].includes(event)){
-        const u = session?.user ?? null;
-        setUser(u);
-        if(!u){ setView("auth"); return; }
-        try{ await loadData(u); }catch(e){ setView("welcome"); }
-      } else if(event==="SIGNED_OUT"){
-        setUser(null); setView("auth");
-      }
-    });
-    return ()=>subscription.unsubscribe();
-  },[]);
+  let done = false;
+
+  async function boot(u) {
+    if(done) return;
+    done = true;
+    setUser(u);
+    if(!u){ setView("auth"); return; }
+    try{ await loadData(u); }catch{ setView("welcome"); }
+  }
+
+  // SIGNED_INが先に来た場合
+  const { data:{ subscription } } = supabase.auth.onAuthStateChange(async(event, session)=>{
+    if(["INITIAL_SESSION","SIGNED_IN","TOKEN_REFRESHED"].includes(event)){
+      await boot(session?.user ?? null);
+    } else if(event==="SIGNED_IN" && done){
+      // ログアウト後の再ログイン
+      done = false;
+      await boot(session?.user ?? null);
+    } else if(event==="SIGNED_OUT"){
+      done = false; setUser(null); setView("auth");
+    }
+  });
+
+  // フォールバック：2秒後もまだloadingなら手動チェック
+  const timer = setTimeout(async()=>{
+    if(done) return;
+    const { data:{ session } } = await supabase.auth.getSession();
+    await boot(session?.user ?? null);
+  }, 2000);
+
+  return ()=>{ subscription.unsubscribe(); clearTimeout(timer); };
+},[]);
 
   async function loadData(currentUser) {
     try {
       const [{ data: prof }, { data: logRows }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", currentUser.id).single(),
+        supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
         supabase.from("logs").select("*").eq("user_id", currentUser.id).order("date"),
       ]);
       const ls = (logRows || []).map(r => ({ date: r.date, weight: r.weight, tags: r.tags||[], cond: r.cond||"" }));
