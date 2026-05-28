@@ -428,7 +428,15 @@ useEffect(()=>{
     try{
       const res=await fetch("/api/analyze",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({prompt:`あなたは健康データアナリストです。以下の統計サマリーをもとに、ユーザーに直接語りかける形で【あなただけの傾向】を3点、具体的に伝えてください。「あなたは〜」という二人称で。一般論禁止。数字・パターン根拠。箇条書き・日本語。\n\n${stats}`})
+ body:JSON.stringify({prompt:`あなたは健康データアナリストです。以下の統計サマリーをもとに、ユーザーに直接語りかける形で以下の2点を日本語・箇条書きで答えてください。
+【あなただけの傾向】（2点）
+- 数字とパターンに基づいた、この人固有の傾向
+- 一般論禁止。「あなたは〜」という二人称で
+
+【今週やるべきこと】（1点）
+- 上記の傾向を踏まえた、今週の具体的なアクション1つ
+- 「〜をやめる」ではなく「〜に変える」という形で
+\n\n${stats}`})
       });
       const d=await res.json();
       const text=d.content?.find(c=>c.type==="text")?.text||"分析できませんでした。";
