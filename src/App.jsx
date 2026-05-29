@@ -431,6 +431,9 @@ async function saveCheckup(){
 
     // Supabaseに保存
     const rows = d.data.map(r => ({...r, user_id: user.id}));
+    console.log("saving rows:", rows[0]); // ← 追加
+    const { error } = await supabase.from("oura_data").upsert(rows, {onConflict:"user_id,date"});
+console.log("upsert error:", error); // ← 追加
     await supabase.from("oura_data").upsert(rows, {onConflict:"user_id,date"});
 
     // 最終取得日を更新
