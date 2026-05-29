@@ -325,6 +325,7 @@ export default function App() {
   const [ai,     setAi]    = useState({text:"",loading:false});
   const [chartPeriod, setChartPeriod] = useState("14d");
   const [personalWeights, setPersonalWeights] = useState({});
+  const [ouraToken, setOuraToken] = useState("");
 
 useEffect(()=>{
   let loaded = false;
@@ -368,6 +369,7 @@ useEffect(()=>{
     } else {
       setPersonalWeights(savedWeights);
     }
+      if(prof?.oura_token) setOuraToken(prof.oura_token);
     setView(!prof ? "welcome" : !ls.find(x=>x.date===todayStr()) ? "input" : "dashboard");
   } catch(e) {
 
@@ -382,9 +384,9 @@ useEffect(()=>{
     setProf({basic,checkup});setView("setup_checkup");
   }
 
-  async function saveCheckup(){
+async function saveCheckup(){
     if(!user) return;
-    await supabase.from("profiles").upsert({id:user.id,basic,checkup});
+    await supabase.from("profiles").upsert({id:user.id,basic,checkup,oura_token:ouraToken||null});
     setProf({...profile,checkup});setView("input");
   }
 
@@ -588,6 +590,17 @@ body:JSON.stringify({prompt:`あなたは健康データアナリストです。
             </div>
           ))}
         </div>
+        <div style={{marginTop:16}}>
+  <div style={{fontSize:13,color:"#555",marginBottom:8}}>Oura Ring連携（任意）</div>
+  <div style={{fontSize:12,color:"#aaa",marginBottom:8}}>Personal Access TokenをOura公式サイトから取得して入力してください。</div>
+  <input
+    type="password"
+    placeholder="oura personal access token"
+    value={ouraToken}
+    onChange={e=>setOuraToken(e.target.value)}
+    style={{width:"100%",padding:"8px 12px",fontSize:13,border:"1px solid #ddd",borderRadius:8,outline:"none",boxSizing:"border-box"}}
+  />
+</div>
         <button style={s.btn} onClick={saveCheckup}>記録を始める →</button>
         <button style={s.outlineBtn} onClick={saveCheckup}>あとで入力する →</button>
       </div>
