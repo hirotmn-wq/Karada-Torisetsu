@@ -448,15 +448,19 @@ async function saveCheckup(){
   }
 }
 async function fetchOura(){
-  if(!ouraToken) return;
+  if(!ouraToken || !user) return;
   try{
     const res = await fetch("/api/oura",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({token:ouraToken, dataType:"readiness"})
+      body:JSON.stringify({
+        token: ouraToken,
+        lastFetchDate: profile?.oura_last_fetch || null
+      })
     });
     const d = await res.json();
-    setOuraData(d.data || []);
+    console.log("Oura response:", d);  // ← 追加
+    if(!d.data || d.data.length === 0) return;
   }catch{
     console.error("Oura fetch failed");
   }
