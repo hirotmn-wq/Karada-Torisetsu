@@ -348,7 +348,8 @@ useEffect(()=>{
   return ()=>subscription.unsubscribe();
 },[]);
 
- async function loadData(currentUser) {
+async function loadData(currentUser) {
+  console.log("loadData: start");
   try {
     const [profResult, logResult] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
