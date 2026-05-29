@@ -350,6 +350,7 @@ export default function App() {
   async function resetAll(){
     await storage.delete(K.prof).catch(()=>{});
     await storage.delete(K.logs).catch(()=>{});
+    console.log("loadData: start", currentUser.id); // ← この行を追加
     setProf(null);setLogs([]);setAi({text:"",loading:false});
     setBasic({birthYear:"",height:"",targetWeight:""});
     setChk({sys:"",dia:"",ldl:"",hdl:"",tg:"",ggt:"",hba1c:""});
