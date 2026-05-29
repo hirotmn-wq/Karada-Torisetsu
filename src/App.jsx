@@ -326,6 +326,7 @@ export default function App() {
   const [chartPeriod, setChartPeriod] = useState("14d");
   const [personalWeights, setPersonalWeights] = useState({});
   const [ouraToken, setOuraToken] = useState("");
+  const [ouraData, setOuraData] = useState(null);
 
 useEffect(()=>{
   let loaded = false;
@@ -414,6 +415,34 @@ async function saveCheckup(){
     await supabase.auth.signOut();
     setUser(null);setProf(null);setLogs([]);
   }
+  async function fetchOura(){
+  if(!ouraToken) return;
+  try{
+    const res = await fetch("/api/oura",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token:ouraToken, dataType:"readiness"})
+    });
+    const d = await res.json();
+    setOuraData(d.data || []);
+  }catch{
+    console.error("Oura fetch failed");
+  }
+}
+async function fetchOura(){
+  if(!ouraToken) return;
+  try{
+    const res = await fetch("/api/oura",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token:ouraToken, dataType:"readiness"})
+    });
+    const d = await res.json();
+    setOuraData(d.data || []);
+  }catch{
+    console.error("Oura fetch failed");
+  }
+}
 
   async function analyze(){
     if(profile?.analysis_text && profile?.analysis_at){
@@ -809,9 +838,24 @@ body:JSON.stringify({prompt:`あなたは健康データアナリストです。
           )}
         </div>
 
-        <div style={{display:"flex",gap:8,marginTop:4}}>
-          <button style={s.ghostBtn} onClick={()=>setView("setup_checkup")}>健診データを更新</button>
+<div style={{display:"flex",gap:8,marginTop:4}}>
+  <button style={s.ghostBtn} onClick={()=>setView("setup_checkup")}>健診データを更新</button>
+</div>
+{ouraToken && (
+  <div style={s.card}>
+    <div style={s.lbl}>Oura連携</div>
+    <button style={s.btn} onClick={fetchOura}>Ouraデータを取得</button>
+    {ouraData && (
+      <div style={{marginTop:12,fontSize:13,color:"#333"}}>
+        {ouraData.slice(0,3).map((d,i)=>(
+          <div key={i} style={{padding:"6px 0",borderBottom:"1px solid #f0f0f0"}}>
+            {d.day}：Readiness {d.score}
           </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
       </div>
     </div>
   );
