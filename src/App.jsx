@@ -416,17 +416,35 @@ async function saveCheckup(){
     setUser(null);setProf(null);setLogs([]);
   }
   async function fetchOura(){
-  if(!ouraToken) return;
+  if(!ouraToken || !user) return;
   try{
     const res = await fetch("/api/oura",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({token:ouraToken, dataType:"readiness"})
+      body:JSON.stringify({
+        token: ouraToken,
+        lastFetchDate: profile?.oura_last_fetch || null
+      })
     });
     const d = await res.json();
-    setOuraData(d.data || []);
-  }catch{
-    console.error("Oura fetch failed");
+    if(!d.data || d.data.length === 0) return;
+
+    // Supabaseに保存
+    const rows = d.data.map(r => ({...r, user_id: user.id}));
+    await supabase.from("oura_data").upsert(rows, {onConflict:"user_id,date"});
+
+    // 最終取得日を更新
+    const latestDate = d.data.map(r=>r.date).sort().slice(-1)[0];
+    await supabase.from("profiles").upsert({
+      id: user.id,
+      basic,
+      checkup,
+      oura_last_fetch: latestDate
+    });
+    setProf({...profile, oura_last_fetch: latestDate});
+    setOuraData(d.data);
+  }catch(e){
+    console.error("Oura fetch failed", e);
   }
 }
 async function fetchOura(){
