@@ -39,7 +39,8 @@ export default async function handler(req, res) {
       merged[d.day].deep_sleep_duration = d.contributors?.deep_sleep;
       merged[d.day].awake_time = d.contributors?.total_sleep;
     });
-
+    
+if(sleepDetail.data?.length > 0) console.log("sleepDetail keys:", Object.keys(sleepDetail.data[0]));
     // HRV(ms)はsleepエンドポイントから取得
     (sleepDetail.data||[]).forEach(d => {
       const day = d.day;
