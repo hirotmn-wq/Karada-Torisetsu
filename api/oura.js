@@ -32,6 +32,7 @@ export default async function handler(req, res) {
         temperature_deviation: d.temperature_deviation,
       };
     });
+if(sleep.data?.length > 0) console.log("sleep sample:", JSON.stringify(sleep.data[0]));
 (sleep.data||[]).forEach(d => {
   if(!merged[d.day]) merged[d.day] = {date: d.day};
   merged[d.day].sleep_score = d.score;
