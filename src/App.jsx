@@ -334,8 +334,11 @@ useEffect(()=>{
 
   const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session)=>{
   console.log("auth event:", event, session?.user?.id);
-    if((event === "SIGNED_IN" || event === "INITIAL_SESSION") && !loaded){
-      loaded = true;
+    if(event === "INITIAL_SESSION" && !session){
+  setView("auth"); return;
+}
+if((event === "SIGNED_IN" || event === "INITIAL_SESSION") && !loaded){
+  loaded = true;
       const u = session?.user ?? null;
       setUser(u);
       if(!u){ setView("auth"); return; }
