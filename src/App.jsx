@@ -329,6 +329,7 @@ export default function App() {
   const [ouraData, setOuraData] = useState(null);
 
 useEffect(()=>{
+  console.log("useEffect: start");
   let loaded = false;
 
   const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session)=>{
