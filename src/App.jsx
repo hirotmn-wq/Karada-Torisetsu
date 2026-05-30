@@ -451,25 +451,6 @@ console.log("upsert error:", error); // ← 追加
     console.error("Oura fetch failed", e);
   }
 }
-async function fetchOura(){
-  if(!ouraToken || !user) return;
-  try{
-    const res = await fetch("/api/oura",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        token: ouraToken,
-        lastFetchDate: profile?.oura_last_fetch || null
-      })
-    });
-    const d = await res.json();
-    console.log("Oura response:", d);  // ← 追加
-    if(!d.data || d.data.length === 0) return;
-  }catch{
-    console.error("Oura fetch failed");
-  }
-}
-
   async function analyze(){
     if(profile?.analysis_text && profile?.analysis_at){
       const lastDate=profile.analysis_at.split("T")[0];
