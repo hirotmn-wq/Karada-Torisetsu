@@ -501,7 +501,9 @@ console.log("upsert error:", error); // ← 追加
     }
     setAi({text:"",loading:true});
     const weights=calcPersonalWeights(logs);
-    const stats=buildStatsForAI(logs,weights,basic,ouraData);
+    console.log("ouraData in analyze:", ouraData?.length, ouraData?.[0]);
+const stats=buildStatsForAI(logs,weights,basic,ouraData);
+console.log("stats:", stats);
     try{
       const res=await fetch("/api/analyze",{
         method:"POST",headers:{"Content-Type":"application/json"},
