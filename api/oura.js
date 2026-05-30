@@ -28,17 +28,17 @@ export default async function handler(req, res) {
         date: d.day,
         readiness_score: d.score,
         resting_hr: d.contributors?.resting_heart_rate,
-        hrv_average: d.contributors?.hrv_balance,
         recovery_index: d.contributors?.recovery_index,
         temperature_deviation: d.temperature_deviation,
       };
     });
-    (sleep.data||[]).forEach(d => {
-      if(!merged[d.day]) merged[d.day] = {date: d.day};
-      merged[d.day].sleep_score = d.score;
-      merged[d.day].deep_sleep_duration = d.contributors?.deep_sleep;
-      merged[d.day].awake_time = d.contributors?.total_sleep;
-    });
+(sleep.data||[]).forEach(d => {
+  if(!merged[d.day]) merged[d.day] = {date: d.day};
+  merged[d.day].sleep_score = d.score;
+  merged[d.day].deep_sleep_duration = d.contributors?.deep_sleep;
+  merged[d.day].awake_time = d.contributors?.total_sleep;
+  merged[d.day].hrv_average = d.average_hrv;
+});
     (activity.data||[]).forEach(d => {
       if(!merged[d.day]) merged[d.day] = {date: d.day};
       merged[d.day].activity_score = d.score;
