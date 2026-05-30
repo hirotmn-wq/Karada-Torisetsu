@@ -333,6 +333,7 @@ useEffect(()=>{
   let loaded = false;
 
   const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session)=>{
+  console.log("auth event:", event, session?.user?.id);
     if(event === "SIGNED_IN" && !loaded){
       loaded = true;
       const u = session?.user ?? null;
