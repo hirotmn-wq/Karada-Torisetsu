@@ -173,7 +173,7 @@ const COMBOS = [
 }
 
 // ── AI用統計サマリー構築 ─────────────────────────────────────────
-function buildStatsForAI(logs, weights, basic) {
+function buildStatsForAI(logs, weights, basic, ouraData) {
   const lines=[];
   const age=basic.birthYear?new Date().getFullYear()-parseInt(basic.birthYear):null;
   if(age) lines.push(`対象: ${age}歳男性`);
@@ -218,7 +218,38 @@ function buildStatsForAI(logs, weights, basic) {
       if(o) lines.push(`${l.date}: ${o.l}`);
     });
   }
-
+// Ouraデータとの相関
+if(ouraData && ouraData.length > 0){
+  lines.push("\n【Ouraデータ（直近30日）】");
+  const recent = ouraData.slice(-30);
+  
+  // 飲酒翌日のHRV
+  const drinkNextHRV = [];
+  const normalHRV = [];
+  recent.forEach(o => {
+    const prev = logs.find(l => {
+      const d = new Date(o.date+"T00:00:00");
+      d.setDate(d.getDate()-1);
+      return l.date === d.toISOString().split("T")[0];
+    });
+    if(o.hrv_average == null) return;
+    if(prev && (prev.tags||[]).includes("drinking")){
+      drinkNextHRV.push(o.hrv_average);
+    } else {
+      normalHRV.push(o.hrv_average);
+    }
+  });
+  if(drinkNextHRV.length >= 2 && normalHRV.length >= 2){
+    const avgDrink = +(drinkNextHRV.reduce((a,b)=>a+b,0)/drinkNextHRV.length).toFixed(1);
+    const avgNormal = +(normalHRV.reduce((a,b)=>a+b,0)/normalHRV.length).toFixed(1);
+    lines.push(`飲酒翌日HRV平均: ${avgDrink}ms（通常日: ${avgNormal}ms）`);
+  }
+  
+  // 直近7日のReadiness
+  const r7oura = ouraData.slice(-7);
+  const avgReadiness = +(r7oura.filter(o=>o.readiness_score).reduce((a,o)=>a+o.readiness_score,0)/r7oura.filter(o=>o.readiness_score).length).toFixed(0);
+  if(avgReadiness) lines.push(`直近7日Readiness平均: ${avgReadiness}`);
+}
   return lines.join("\n");
 }
 
@@ -356,12 +387,14 @@ if((event === "SIGNED_IN" || event === "INITIAL_SESSION") && !loaded){
 async function loadData(currentUser) {
   console.log("loadData: start");
   try {
-    const [profResult, logResult] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
-      supabase.from("logs").select("*").eq("user_id", currentUser.id).order("date"),
-    ]);
-        const prof = profResult.data;
-    const logRows = logResult.data;
+const [profResult, logResult, ouraResult] = await Promise.all([
+  supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
+  supabase.from("logs").select("*").eq("user_id", currentUser.id).order("date"),
+  supabase.from("oura_data").select("*").eq("user_id", currentUser.id).order("date"),
+]);
+const prof = profResult.data;
+const logRows = logResult.data;
+const ouraRows = (ouraResult.data || []);
     const ls = (logRows || []).map(r => ({ date: r.date, weight: r.weight, tags: r.tags||[], cond: r.cond||"" }));
     setProf(prof);
     setLogs(ls);
@@ -377,6 +410,7 @@ async function loadData(currentUser) {
       setPersonalWeights(savedWeights);
     }
       if(prof?.oura_token) setOuraToken(prof.oura_token);
+      if(ouraRows.length > 0) setOuraData(ouraRows);
     setView(!prof ? "welcome" : !ls.find(x=>x.date===todayStr()) ? "input" : "dashboard");
   } catch(e) {
 
@@ -467,7 +501,7 @@ console.log("upsert error:", error); // ← 追加
     }
     setAi({text:"",loading:true});
     const weights=calcPersonalWeights(logs);
-    const stats=buildStatsForAI(logs,weights,basic);
+    const stats=buildStatsForAI(logs,weights,basic,ouraData);
     try{
       const res=await fetch("/api/analyze",{
         method:"POST",headers:{"Content-Type":"application/json"},
