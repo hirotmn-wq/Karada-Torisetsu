@@ -626,6 +626,10 @@ const stats=buildStatsForAI(logs,basic,ouraData);
       const res=await fetch("/api/analyze",{
         method:"POST",headers:{"Content-Type":"application/json"},
 body:JSON.stringify({prompt:`あなたは健康データアナリストです。以下の統計サマリーをもとに、ユーザーに直接語りかける形で以下の2点を日本語・箇条書きで答えてください。
+【指標の方向性（必ず守ること）】
+- HRV（心拍変動）: 高いほど回復状態が良い。低下が懸念サイン
+- Readiness: 高いほど良い。低下が懸念サイン
+- 睡眠スコア: 高いほど良い。低下が懸念サイン
 
 【あなただけの傾向】（2点）
 - この人のデータに実際に出ているパターンのみを伝える
