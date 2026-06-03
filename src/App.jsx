@@ -23,237 +23,333 @@ const COND_OPTS = [
   {v:"worst",e:"💀",l:"限界",    c:"#c0392b",bg:"#fce8e8"},
 ];
 
-// サンプル数の最低閾値
-const MIN_SAMPLES = {
-  drinking:8, eating_out:3, fried:3, ramen:3,
-  exercise:5, poor_sleep:5, late_meal:3
-};
 
 const TEAL="#1D9E75",TEAL_BG="#e1f5ee",RED="#c0392b",RED_BG="#fce8e8",AMBER="#d97706",AMBER_BG="#fef3c7";
 const todayStr = () => new Date().toISOString().split("T")[0];
 const fmtDate  = d => { const x=new Date(d+"T00:00:00"); return `${x.getMonth()+1}/${x.getDate()}`; };
 
-// ── パーソナルウエイト計算（指数減衰・サンプル閾値） ──────────────
-function calcDecayProfile(logs, tagId, maxDays=4) {
-  const relativeElevations = Array(maxDays).fill(0).map(()=>[]);
-  for(let i=1; i<logs.length; i++){
-    const log=logs[i], prev=logs[i-1];
-    if(!(log.tags||[]).includes(tagId)) continue;
-    const day0 = log.weight - prev.weight;
-    if(day0 <= 0.1) continue;
-    for(let d=1; d<=maxDays; d++){
-      if(i+d >= logs.length) break;
-      const next=logs[i+d];
-      const gap=Math.floor((new Date(next.date+"T00:00:00")-new Date(log.date+"T00:00:00"))/(1000*60*60*24));
-      if(gap !== d) break;
-      relativeElevations[d-1].push(Math.max(0,(next.weight-prev.weight)/day0));
-    }
-  }
-  const avgs=relativeElevations.map(arr=>arr.length>=2?+(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2):null);
-  if(avgs[0]===null) return null;
-  return [1.0, ...avgs.filter(a=>a!==null)];
+// ── ユーティリティ ──────────────────────────────────────────────
+function removeOutliers(values) {
+  if (values.length < 4) return values;
+  const sorted = [...values].sort((a, b) => a - b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  return values.filter(v => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
 }
 
-function calcPersonalWeights(logs) {
-  const now = new Date();
-  const result = {};
+function meanVal(values) {
+  const clean = values.filter(v => v != null && !isNaN(v));
+  if (clean.length === 0) return null;
+  return +(clean.reduce((a, b) => a + b, 0) / clean.length).toFixed(1);
+}
+
+function detectAnomalies(entries, valueKey, dateKey, windowDays=30) {
+  const recent = entries.slice(-windowDays);
+  const values = recent.map(e => e[valueKey]).filter(v => v != null && !isNaN(v));
+  const cleanValues = removeOutliers(values);
+  if (cleanValues.length < 7) return [];
+  const avg = meanVal(cleanValues);
+  const std = +Math.sqrt(cleanValues.reduce((a, v) => a + Math.pow(v - avg, 2), 0) / cleanValues.length).toFixed(1);
+  if (std === 0) return [];
+  return recent.filter(e => {
+    const v = e[valueKey];
+    return v != null && Math.abs(v - avg) >= 2 * std;
+  }).map(e => ({ date: e[dateKey], value: e[valueKey], avg, direction: e[valueKey] > avg ? 'high' : 'low' }));
+}
+
+function getWeekKey(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return mon.toISOString().split('T')[0];
+}
+
+const MIN_SAMPLES = {
+  drinking:30, exercise:30, good_sleep:30, poor_sleep:30,
+  eating_out:15, ramen:15, late_meal:15,
+  trip:10, stress:10,
+};
+
+// ── 体重トレンド層 ──────────────────────────────────────────────
+function buildWeightTrend(logs, targetWeight) {
+  const lines = [];
+  if (logs.length < 3) return lines;
+  lines.push('\n【体重トレンド】');
+  const allW = removeOutliers(logs.map(l => l.weight).filter(w => w != null));
+  if (allW.length >= 14) {
+    const half = Math.floor(allW.length / 2);
+    const first = meanVal(allW.slice(0, half));
+    const second = meanVal(allW.slice(half));
+    const diff = +(second - first).toFixed(1);
+    lines.push(`長期（全${logs.length}日）: ${diff>0?'+':''}${diff}kg（前半${first}kg→後半${second}kg）`);
+  }
+  const monthly = {};
+  logs.forEach(l => {
+    const m = l.date.slice(0,7);
+    if (!monthly[m]) monthly[m] = [];
+    if (l.weight) monthly[m].push(l.weight);
+  });
+  const monthKeys = Object.keys(monthly).sort();
+  if (monthKeys.length >= 2) {
+    const str = monthKeys.map(m => {
+      const avg = meanVal(removeOutliers(monthly[m]));
+      return avg ? `${m.slice(5)}月:${avg}kg` : null;
+    }).filter(Boolean).join(' / ');
+    lines.push(`月次平均: ${str}`);
+  }
+  const weekly = {};
+  logs.forEach(l => {
+    const key = getWeekKey(l.date);
+    if (!weekly[key]) weekly[key] = [];
+    if (l.weight) weekly[key].push(l.weight);
+  });
+  const weekKeys = Object.keys(weekly).sort().slice(-4);
+  if (weekKeys.length >= 2) {
+    const str = weekKeys.map(w => {
+      const avg = meanVal(removeOutliers(weekly[w]));
+      return avg ? `${w.slice(5)}週:${avg}kg` : null;
+    }).filter(Boolean).join(' / ');
+    lines.push(`週次平均（直近4週）: ${str}`);
+    const prev = meanVal(removeOutliers(weekly[weekKeys[weekKeys.length-2]]));
+    const curr = meanVal(removeOutliers(weekly[weekKeys[weekKeys.length-1]]));
+    if (prev && curr) lines.push(`先週比: ${curr-prev>0?'+':''}${+(curr-prev).toFixed(1)}kg`);
+  }
+  if (targetWeight) {
+    const currentW = logs[logs.length-1]?.weight;
+    if (currentW) {
+      const toTarget = +(currentW - parseFloat(targetWeight)).toFixed(1);
+      lines.push(`目標まで: ${toTarget>0?'+':''}${toTarget}kg（目標${targetWeight}kg）`);
+    }
+  }
+  const anomalies = detectAnomalies(logs, 'weight', 'date');
+  anomalies.forEach(a => {
+    lines.push(`※ ${a.date}の体重(${a.value}kg)は通常より著しく${a.direction==='high'?'高い':'低い'}値です（通常平均${a.avg}kg）`);
+  });
+  return lines;
+}
+// ── 行動タグ層 ──────────────────────────────────────────────────
+function buildTagTrend(logs) {
+  const lines = [];
+  if (logs.length < 7) return lines;
+  lines.push('\n【行動タグトレンド】');
+  const monthly = {};
+  logs.forEach(l => {
+    const m = l.date.slice(0,7);
+    if (!monthly[m]) monthly[m] = { tags:{} };
+    (l.tags||[]).forEach(t => { monthly[m].tags[t] = (monthly[m].tags[t]||0)+1; });
+  });
+  const monthKeys = Object.keys(monthly).sort();
+  if (monthKeys.length >= 2) {
+    lines.push('月次頻度（回/月）:');
+    TAGS.forEach(tag => {
+      const counts = monthKeys.map(m => monthly[m].tags[tag.id]||0);
+      if (counts.some(c => c > 0)) {
+        const str = monthKeys.map((m,i) => `${m.slice(5)}月:${counts[i]}回`).join(' / ');
+        lines.push(`  ${tag.label}: ${str}`);
+      }
+    });
+  }
+  const weekly = {};
+  logs.forEach(l => {
+    const key = getWeekKey(l.date);
+    if (!weekly[key]) weekly[key] = { tags:{} };
+    (l.tags||[]).forEach(t => { weekly[key].tags[t] = (weekly[key].tags[t]||0)+1; });
+  });
+  const weekKeys = Object.keys(weekly).sort().slice(-4);
+  if (weekKeys.length >= 2) {
+    lines.push('週次頻度（直近4週）:');
+    TAGS.forEach(tag => {
+      const counts = weekKeys.map(w => weekly[w].tags[tag.id]||0);
+      if (counts.some(c => c > 0)) {
+        const str = weekKeys.map((w,i) => `${w.slice(5)}週:${counts[i]}回`).join(' / ');
+        lines.push(`  ${tag.label}: ${str}`);
+      }
+    });
+  }
+  const r7 = logs.slice(-7);
+  const r7counts = {};
+  r7.forEach(l => (l.tags||[]).forEach(t => { r7counts[t]=(r7counts[t]||0)+1; }));
+  const r7str = TAGS.filter(t => r7counts[t.id]>0).map(t => `${t.label}:${r7counts[t.id]}回`).join(', ');
+  if (r7str) lines.push(`直近7日: ${r7str}`);
+  return lines;
+}
+// ── Ouraトレンド層 ─────────────────────────────────────────────
+function buildOuraTrend(ouraData) {
+  const lines = [];
+  if (!ouraData || ouraData.length < 7) return lines;
+  lines.push('\n【Ouraトレンド】');
+  const sorted = [...ouraData].sort((a,b) => a.date.localeCompare(b.date));
+  const monthly = {};
+  sorted.forEach(o => {
+    const m = o.date.slice(0,7);
+    if (!monthly[m]) monthly[m] = { hrv:[], readiness:[], sleep:[] };
+    if (o.hrv_average) monthly[m].hrv.push(o.hrv_average);
+    if (o.readiness_score) monthly[m].readiness.push(o.readiness_score);
+    if (o.sleep_score) monthly[m].sleep.push(o.sleep_score);
+  });
+  const monthKeys = Object.keys(monthly).sort();
+  if (monthKeys.length >= 2) {
+    lines.push('月次平均:');
+    monthKeys.slice(-6).forEach(m => {
+      const hrv = meanVal(removeOutliers(monthly[m].hrv));
+      const r   = meanVal(removeOutliers(monthly[m].readiness));
+      const s   = meanVal(removeOutliers(monthly[m].sleep));
+      const parts = [];
+      if (hrv) parts.push(`HRV:${hrv}ms`);
+      if (r)   parts.push(`Readiness:${r}`);
+      if (s)   parts.push(`Sleep:${s}`);
+      if (parts.length) lines.push(`  ${m.slice(5)}月: ${parts.join(', ')}`);
+    });
+  }
+  const weekly = {};
+  sorted.forEach(o => {
+    const key = getWeekKey(o.date);
+    if (!weekly[key]) weekly[key] = { hrv:[], readiness:[] };
+    if (o.hrv_average)    weekly[key].hrv.push(o.hrv_average);
+    if (o.readiness_score) weekly[key].readiness.push(o.readiness_score);
+  });
+  const weekKeys = Object.keys(weekly).sort().slice(-4);
+  if (weekKeys.length >= 2) {
+    lines.push('週次平均（直近4週）:');
+    weekKeys.forEach(w => {
+      const hrv = meanVal(removeOutliers(weekly[w].hrv));
+      const r   = meanVal(removeOutliers(weekly[w].readiness));
+      const parts = [];
+      if (hrv) parts.push(`HRV:${hrv}ms`);
+      if (r)   parts.push(`Readiness:${r}`);
+      if (parts.length) lines.push(`  ${w.slice(5)}週: ${parts.join(', ')}`);
+    });
+    const prevHrv = meanVal(removeOutliers(weekly[weekKeys[weekKeys.length-2]].hrv));
+    const currHrv = meanVal(removeOutliers(weekly[weekKeys[weekKeys.length-1]].hrv));
+    if (prevHrv && currHrv) {
+      const diff = +(currHrv - prevHrv).toFixed(1);
+      lines.push(`HRV先週比: ${diff>0?'+':''}${diff}ms`);
+    }
+  }
+  const ouraWithDate = sorted.map(o => ({ date:o.date, hrv:o.hrv_average, readiness:o.readiness_score }));
+  detectAnomalies(ouraWithDate, 'hrv', 'date').forEach(a => {
+    lines.push(`※ ${a.date}のHRV(${a.value}ms)は通常より著しく${a.direction==='high'?'高い':'低い'}値です（通常平均${a.avg}ms）`);
+  });
+  detectAnomalies(ouraWithDate, 'readiness', 'date').forEach(a => {
+    lines.push(`※ ${a.date}のReadiness(${a.value})は通常より著しく${a.direction==='high'?'高い':'低い'}値です（通常平均${a.avg}）`);
+  });
+  return lines;
+}
+// ── 相関層 ─────────────────────────────────────────────────────
+function buildCorrelation(logs, ouraData) {
+  const lines = [];
+  if (logs.length < 10) return lines;
+  const sorted = [...logs].sort((a,b) => a.date.localeCompare(b.date));
+  const ouraMap = {};
+  if (ouraData) ouraData.forEach(o => { ouraMap[o.date] = o; });
+  const minN = (tagId) => MIN_SAMPLES[tagId] || 10;
+
+  // タグ×体重（ラグ自動検出）
+  const tagWeightCorr = {};
   TAGS.forEach(tag => {
-    const samples = [];
-    for(let i=1; i<logs.length; i++) {
-      const log=logs[i], prev=logs[i-1];
-      if(!(log.tags||[]).includes(tag.id)) continue;
-      const logDate=new Date(log.date+"T00:00:00");
-      const daysAgo=Math.floor((now-logDate)/(1000*60*60*24));
-      if(daysAgo>90) continue;
-      const gap=Math.floor((logDate-new Date(prev.date+"T00:00:00"))/(1000*60*60*24));
-      if(gap>2) continue;
-      const decay=daysAgo<=30?1.0:daysAgo<=60?0.6:0.3;
-      samples.push({delta:+(log.weight-prev.weight).toFixed(2), decay});
+    const lagResults = {};
+    for (let lag=1; lag<=4; lag++) {
+      const samples = [];
+      for (let i=0; i<sorted.length-lag; i++) {
+        const log = sorted[i];
+        if (!(log.tags||[]).includes(tag.id)) continue;
+        const target = sorted[i+lag];
+        if (!target?.weight || !log.weight) continue;
+        const gap = Math.floor((new Date(target.date+'T00:00:00') - new Date(log.date+'T00:00:00'))/(1000*60*60*24));
+        if (gap !== lag) continue;
+        samples.push(target.weight - log.weight);
+      }
+      if (samples.length >= 3) lagResults[lag] = { delta:meanVal(removeOutliers(samples)), n:samples.length };
     }
-    const minN=MIN_SAMPLES[tag.id]||5;
-    if(samples.length>=minN) {
-      const td=samples.reduce((a,s)=>a+s.decay,0);
-      const wd=samples.reduce((a,s)=>a+s.delta*s.decay,0)/td;
-      const decayProfile=calcDecayProfile(logs, tag.id);
-      result[tag.id]={delta:+wd.toFixed(2), sampleN:samples.length, calibrated:true, decayProfile};
-    } else {
-      result[tag.id]={delta:null, sampleN:samples.length, calibrated:false, needed:minN-samples.length};
+    const best = Object.entries(lagResults).sort((a,b) => Math.abs(b[1].delta)-Math.abs(a[1].delta))[0];
+    if (best) {
+      const totalN = Object.values(lagResults).reduce((a,v) => a+v.n, 0);
+      tagWeightCorr[tag.id] = { lag:parseInt(best[0]), delta:best[1].delta, n:totalN };
     }
   });
-  return result;
-}
-
-// ── コンディションスコア（7日ローリング） ──────────────────────────
-function calcConditionScore(logs, weights) {
-  if(logs.length < 2) return {level:"計測中", scoreColor:"#888", scoreBg:"#f0f0f0", reason:""};
-const COMBOS = [
-    {tags:["drinking","poor_sleep"], mod:1.5},
-    {tags:["drinking","stress"],     mod:1.4},
-    {tags:["trip","drinking"],       mod:1.4},
-    {tags:["trip","stress"],         mod:1.3},
-    {tags:["trip","poor_sleep"],     mod:1.3},
-    {tags:["good_sleep","exercise"], mod:0.7},
-    {tags:["good_sleep","poor_sleep"],mod:0.8},
-  ];
-  const comboMod = log => {
-    const t = log.tags||[];
-    return COMBOS.reduce((m,c)=>c.tags.every(x=>t.includes(x))?Math.max(m,c.mod):m, 1.0);
-  };
-  // 残存負荷の定義（日数ごとの残存率）
-  const DECAY = {
-    drinking:   [1.0, 0.4, 0.0],
-    ramen:      [1.0, 0.0],
-    late_meal:  [1.0, 0.0],
-    eating_out: [1.0, 0.0],
-    stress:     [1.0, 0.75, 0.5, 0.0],
-    trip:       [1.0, 0.6, 0.0],
-    meeting:    [1.0, 0.3, 0.0],
-    poor_sleep: [1.0, 0.4, 0.0],
-    exercise:   [-1.0, -0.4, 0.0],
-    good_sleep: [-1.0, -0.5, 0.0],
-  };
-
-  const DEFAULT_DMG = {
-    drinking:3, ramen:2, late_meal:2, eating_out:2,
-    stress:4, trip:3, meeting:2, poor_sleep:3,
-    exercise:-2, good_sleep:-3,
-  };
-
-  const today = new Date();
-  let totalLoad = 0;
-
-  // 直近7日のログを処理
-  const recent = logs.slice(-7);
-  recent.forEach(log => {
-    const logDate = new Date(log.date + "T00:00:00");
-    const daysAgo = Math.floor((today - logDate) / (1000*60*60*24));
-    const mod = comboMod(log);
-    (log.tags||[]).forEach(id => {
-      const decay = weights[id]?.decayProfile || DECAY[id] || [1.0, 0.0];
-      const dmg = weights[id]?.calibrated
-        ? Math.abs(weights[id].delta) * (weights[id].delta > 0 ? 1 : -1)
-        : DEFAULT_DMG[id] || 0;
-      const rate = daysAgo < decay.length ? decay[daysAgo] : 0;
-      totalLoad += dmg * rate * mod;
-    });
-  });
-
-  // 体重トレンド補正
-  if(recent.length >= 4){
-    const h1 = recent.slice(0, Math.floor(recent.length/2));
-    const h2 = recent.slice(Math.floor(recent.length/2));
-    const avg = arr => arr.reduce((a,l)=>a+l.weight,0)/arr.length;
-    const delta = avg(h2) - avg(h1);
-    if(delta > 0.3) totalLoad += 1;
-    else if(delta < -0.3) totalLoad -= 1;
-  }
-
-  // 直前3日の負荷トレンド（回復中判定）
-  const prev3 = logs.slice(-6, -3);
-  const curr3 = logs.slice(-3);
-  const loadOf = arr => arr.reduce((a,l)=>a+((l.tags||[]).reduce((s,id)=>s+(DEFAULT_DMG[id]||0),0)),0);
-  const isRecovering = prev3.length >= 2 && loadOf(curr3) < loadOf(prev3);
-
-  // ステート判定
-  let level, scoreColor, scoreBg, reason;
-  if(totalLoad <= 1){
-    level="安定"; scoreColor=TEAL; scoreBg=TEAL_BG;
-    reason="負荷が低く、良いリズムです";
-  } else if(isRecovering){
-    level="回復中"; scoreColor="#2563eb"; scoreBg="#eff6ff";
-    reason="最近の負荷が落ち着いてきています";
-  } else if(totalLoad <= 6){
-    level="負荷高め"; scoreColor=AMBER; scoreBg=AMBER_BG;
-    reason="負荷の蓄積が見られます";
-  } else {
-    level="要リセット"; scoreColor=RED; scoreBg=RED_BG;
-    reason="高負荷が続いています。意識的に回復を";
-  }
-  return {level, scoreColor, scoreBg, reason};
-}
-
-// ── AI用統計サマリー構築 ─────────────────────────────────────────
-function buildStatsForAI(logs, weights, basic, ouraData) {
-  const lines=[];
-  const age=basic.birthYear?new Date().getFullYear()-parseInt(basic.birthYear):null;
-  if(age) lines.push(`対象: ${age}歳男性`);
-
-  // パーソナルウエイト
-  const cal=TAGS.filter(t=>weights[t.id]?.calibrated);
-  if(cal.length>0) {
-    lines.push("\n【行動→翌日体重（実データ算出）】");
-    cal.forEach(t=>{
-      const w=weights[t.id];
-      lines.push(`${t.label}: ${w.delta>0?"+":""}${w.delta}kg (n=${w.sampleN})`);
+  const calibrated = TAGS.filter(t => tagWeightCorr[t.id] && tagWeightCorr[t.id].n >= minN(t.id));
+  if (calibrated.length > 0) {
+    lines.push('\n【行動×体重相関】');
+    calibrated.forEach(t => {
+      const c = tagWeightCorr[t.id];
+      lines.push(`${t.label}: ${c.delta>0?'+':''}${c.delta}kg（${c.lag}日後影響、n=${c.n}）`);
     });
   }
 
-  // 直近7日行動
-  const r7=logs.slice(-7);
-  const cnt={};TAGS.forEach(t=>cnt[t.id]=0);
-  r7.forEach(l=>(l.tags||[]).forEach(id=>{if(cnt[id]!==undefined)cnt[id]++;}));
-  lines.push("\n【直近7日の行動】");
-  TAGS.forEach(t=>{if(cnt[t.id]>0)lines.push(`${t.label}: ${cnt[t.id]}回`);});
-
-  // 連続飲酒パターン
-  let consec=0, maxConsec=0;
-  [...logs].reverse().forEach(l=>{
-    if((l.tags||[]).includes("drinking")){consec++;maxConsec=Math.max(maxConsec,consec);}
-    else consec=0;
-  });
-  if(maxConsec>=2) lines.push(`連続飲酒最大: ${maxConsec}日`);
-
-  // 体重トレンド
-  if(r7.length>=2){
-    const d=+(r7[r7.length-1].weight-r7[0].weight).toFixed(1);
-    lines.push(`\n【直近7日体重変化】${d>0?"+":""}${d}kg`);
-  }
-
-  // 主観コンディション
-  const condData=r7.filter(l=>l.cond);
-  if(condData.length>0){
-    lines.push("\n【直近の主観コンディション】");
-    condData.slice(-5).forEach(l=>{
-      const o=COND_OPTS.find(x=>x.v===l.cond);
-      if(o) lines.push(`${l.date}: ${o.l}`);
+  // タグ×HRV（翌日）
+  if (ouraData && ouraData.length > 0) {
+    const tagHrvCorr = {};
+    TAGS.forEach(tag => {
+      const tagSamples = [], normalSamples = [];
+      sorted.forEach(log => {
+        const oura = ouraMap[log.date];
+        if (!oura?.hrv_average) return;
+        if ((log.tags||[]).includes(tag.id)) {
+          const d = new Date(log.date+'T00:00:00');
+          d.setDate(d.getDate()+1);
+          const next = ouraMap[d.toISOString().split('T')[0]];
+          if (next?.hrv_average) tagSamples.push(next.hrv_average);
+        } else {
+          normalSamples.push(oura.hrv_average);
+        }
+      });
+      if (tagSamples.length >= 3 && normalSamples.length >= 3) {
+        tagHrvCorr[tag.id] = {
+          tagAvg: meanVal(removeOutliers(tagSamples)),
+          normalAvg: meanVal(removeOutliers(normalSamples)),
+          n: tagSamples.length
+        };
+      }
     });
-  }
-// Ouraデータとの相関
-if(ouraData && ouraData.length > 0){
-  lines.push("\n【Ouraデータ（直近30日）】");
-  const recent = ouraData.slice(-30);
-  
-  // 飲酒翌日のHRV
-  const drinkNextHRV = [];
-  const normalHRV = [];
-  recent.forEach(o => {
-    const prev = logs.find(l => {
-      const d = new Date(o.date+"T00:00:00");
-      d.setDate(d.getDate()-1);
-      return l.date === d.toISOString().split("T")[0];
-    });
-    if(o.hrv_average == null) return;
-    if(prev && (prev.tags||[]).includes("drinking")){
-      drinkNextHRV.push(o.hrv_average);
-    } else {
-      normalHRV.push(o.hrv_average);
+    const calibratedHrv = TAGS.filter(t => tagHrvCorr[t.id] && tagHrvCorr[t.id].n >= minN(t.id));
+    if (calibratedHrv.length > 0) {
+      lines.push('\n【行動×HRV相関（翌日）】');
+      calibratedHrv.forEach(t => {
+        const c = tagHrvCorr[t.id];
+        const diff = +(c.tagAvg - c.normalAvg).toFixed(1);
+        lines.push(`${t.label}翌日HRV: ${c.tagAvg}ms（通常日${c.normalAvg}ms、差${diff>0?'+':''}${diff}ms、n=${c.n}）`);
+      });
     }
-  });
-  if(drinkNextHRV.length >= 2 && normalHRV.length >= 2){
-    const avgDrink = +(drinkNextHRV.reduce((a,b)=>a+b,0)/drinkNextHRV.length).toFixed(1);
-    const avgNormal = +(normalHRV.reduce((a,b)=>a+b,0)/normalHRV.length).toFixed(1);
-    lines.push(`飲酒翌日HRV平均: ${avgDrink}ms（通常日: ${avgNormal}ms）`);
   }
-  
-  // 直近7日のReadiness
-  const r7oura = ouraData.slice(-7);
-  const avgReadiness = +(r7oura.filter(o=>o.readiness_score).reduce((a,o)=>a+o.readiness_score,0)/r7oura.filter(o=>o.readiness_score).length).toFixed(0);
-  if(avgReadiness) lines.push(`直近7日Readiness平均: ${avgReadiness}`);
-}
-  return lines.join("\n");
+
+  // 主観コンディション×Oura
+  if (ouraData && ouraData.length > 0) {
+    const condOura = { great:[], good:[], bad:[], worst:[] };
+    sorted.forEach(log => {
+      if (!log.cond) return;
+      const oura = ouraMap[log.date];
+      if (oura?.hrv_average && oura?.readiness_score) {
+        condOura[log.cond]?.push({ hrv:oura.hrv_average, readiness:oura.readiness_score });
+      }
+    });
+    const condEntries = Object.entries(condOura).filter(([,v]) => v.length >= 3);
+    if (condEntries.length >= 2) {
+      lines.push('\n【主観コンディション×Oura】');
+      condEntries.forEach(([cond, entries]) => {
+        const hrv = meanVal(removeOutliers(entries.map(e => e.hrv)));
+        const r   = meanVal(removeOutliers(entries.map(e => e.readiness)));
+        const label = COND_OPTS.find(c => c.v===cond)?.l || cond;
+        lines.push(`${label}: HRV ${hrv}ms, Readiness ${r}（n=${entries.length}）`);
+      });
+    }
+  }
+
+  return lines;
 }
 
 
+// ── メイン: buildStatsForAI ────────────────────────────────────
+function buildStatsForAI(logs, basic, ouraData) {
+  const lines = [];
+  const age = basic.birthYear ? new Date().getFullYear() - parseInt(basic.birthYear) : null;
+  if (age) lines.push(`対象: ${age}歳男性`);
+  lines.push(...buildWeightTrend(logs, basic.targetWeight));
+  lines.push(...buildTagTrend(logs));
+  lines.push(...buildOuraTrend(ouraData));
+  lines.push(...buildCorrelation(logs, ouraData));
+  return lines.join('\n');
+}
 
 // ── 危険予兆・好転サイン検出 ─────────────────────────────────────
 function calcAlerts(logs) {
@@ -293,30 +389,15 @@ function calcAlerts(logs) {
 }
 
 // ── クイックインサイト（コード生成・即表示） ──────────────────────
-function calcQuickInsights(logs, weights) {
+function calcQuickInsights(logs) {
   const ins = [];
-
-  // キャリブレーション済みタグをインパクト順に並べて上位2つ表示
-  const cal = TAGS
-    .filter(t => weights[t.id]?.calibrated)
-    .sort((a,b) => Math.abs(weights[b.id].delta) - Math.abs(weights[a.id].delta))
-    .slice(0, 2);
-
-  cal.forEach(t => {
-    const pw = weights[t.id];
-    const sign = pw.delta > 0 ? "+" : "";
-    ins.push(`${t.icon} ${t.label}翌日 ${sign}${pw.delta}kg の傾向`);
-  });
-
-  // 直近7日体重トレンド
   const r7 = logs.slice(-7);
   if(r7.length >= 2){
     const d = +(r7[r7.length-1].weight - r7[0].weight).toFixed(1);
     if(d <= -0.5) ins.push(`📉 直近7日で${d}kg 改善中`);
     else if(d >= 0.5) ins.push(`📈 直近7日で+${d}kg 増加傾向`);
   }
-
-  return ins.slice(0, 3);
+  return ins;
 }
 
 function calcTrendDir(logs, checkup) {
@@ -360,11 +441,9 @@ export default function App() {
   const [ouraData, setOuraData] = useState(null);
 
 useEffect(()=>{
-  console.log("useEffect: start");
   let loaded = false;
 
   const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session)=>{
-  console.log("auth event:", event, session?.user?.id);
     if(event === "INITIAL_SESSION" && !session){
   setView("auth"); return;
 }
@@ -400,15 +479,7 @@ const ouraRows = (ouraResult.data || []);
     setLogs(ls);
     if(prof?.basic) setBasic(prof.basic);
     if(prof?.checkup) setChk(prof.checkup);
-    const savedWeights = prof?.personal_weights || {};
-    const savedCount = prof?.weights_log_count || 0;
-    if(ls.length - savedCount >= 10 || Object.keys(savedWeights).length === 0){
-      const newWeights = calcPersonalWeights(ls);
-      setPersonalWeights(newWeights);
-      await supabase.from("profiles").upsert({id:currentUser.id, basic:prof?.basic||{}, checkup:prof?.checkup||{}, personal_weights:newWeights, weights_log_count:ls.length});
-    } else {
-      setPersonalWeights(savedWeights);
-    }
+
       if(prof?.oura_token) setOuraToken(prof.oura_token);
       if(ouraRows.length > 0) setOuraData(ouraRows);
     setView(!prof ? "welcome" : !ls.find(x=>x.date===todayStr()) ? "input" : "dashboard");
@@ -431,7 +502,7 @@ async function saveCheckup(){
     setProf({...profile,checkup});setView("input");
   }
 
-  async function saveLog(){
+ async function saveLog(){
     if(!user) return;
     const w=parseFloat(weight);
     if(isNaN(w)||w<30||w>200) return;
@@ -441,15 +512,8 @@ async function saveCheckup(){
     );
     const log={date:todayStr(),weight:w,tags:selTags,cond};
     const nl=[...logs.filter(l=>l.date!==todayStr()),log].sort((a,b)=>a.date.localeCompare(b.date));
-    // 10件ごとにウエイト再計算
-      if(nl.length - (profile?.weights_log_count||0) >= 10){
-        const newWeights = calcPersonalWeights(nl);
-        setPersonalWeights(newWeights);
-        await supabase.from("profiles").upsert({id:user.id, basic, checkup, personal_weights:newWeights, weights_log_count:nl.length});
-      }
     setLogs(nl);setView("dashboard");
   }
-
 
   async function handleLogout(){
     await supabase.auth.signOut();
@@ -472,8 +536,6 @@ async function saveCheckup(){
     // Supabaseに保存
     const rows = d.data.map(r => ({...r, user_id: user.id}));
     console.log("saving rows:", rows[0]); // ← 追加
-    const { error } = await supabase.from("oura_data").upsert(rows, {onConflict:"user_id,date"});
-console.log("upsert error:", error); // ← 追加
     await supabase.from("oura_data").upsert(rows, {onConflict:"user_id,date"});
 
     // 最終取得日を更新
@@ -500,10 +562,7 @@ console.log("upsert error:", error); // ← 追加
       }
     }
     setAi({text:"",loading:true});
-    const weights=calcPersonalWeights(logs);
-    console.log("ouraData in analyze:", ouraData?.length, ouraData?.[0]);
-const stats=buildStatsForAI(logs,weights,basic,ouraData);
-console.log("stats:", stats);
+const stats=buildStatsForAI(logs,basic,ouraData);
     try{
       const res=await fetch("/api/analyze",{
         method:"POST",headers:{"Content-Type":"application/json"},
