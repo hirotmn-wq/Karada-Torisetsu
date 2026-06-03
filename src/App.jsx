@@ -337,7 +337,68 @@ function buildCorrelation(logs, ouraData) {
 
   return lines;
 }
-
+// ── コンディションスコア（7日ローリング） ──────────────────────────
+function calcConditionScore(logs, weights) {
+  if(logs.length < 2) return {level:"計測中", scoreColor:"#888", scoreBg:"#f0f0f0", reason:""};
+  const COMBOS = [
+    {tags:["drinking","poor_sleep"], mod:1.5},
+    {tags:["drinking","stress"],     mod:1.4},
+    {tags:["trip","drinking"],       mod:1.4},
+    {tags:["trip","stress"],         mod:1.3},
+    {tags:["trip","poor_sleep"],     mod:1.3},
+    {tags:["good_sleep","exercise"], mod:0.7},
+    {tags:["good_sleep","poor_sleep"],mod:0.8},
+  ];
+  const comboMod = log => {
+    const t = log.tags||[];
+    return COMBOS.reduce((m,c)=>c.tags.every(x=>t.includes(x))?Math.max(m,c.mod):m, 1.0);
+  };
+  const DECAY = {
+    drinking:[1.0,0.4,0.0], ramen:[1.0,0.0], late_meal:[1.0,0.0],
+    eating_out:[1.0,0.0], stress:[1.0,0.75,0.5,0.0], trip:[1.0,0.6,0.0],
+    poor_sleep:[1.0,0.4,0.0], exercise:[-1.0,-0.4,0.0], good_sleep:[-1.0,-0.5,0.0],
+  };
+  const DEFAULT_DMG = {
+    drinking:3, ramen:2, late_meal:2, eating_out:2,
+    stress:4, trip:3, poor_sleep:3, exercise:-2, good_sleep:-3,
+  };
+  const today = new Date();
+  let totalLoad = 0;
+  const recent = logs.slice(-7);
+  recent.forEach(log => {
+    const logDate = new Date(log.date+"T00:00:00");
+    const daysAgo = Math.floor((today-logDate)/(1000*60*60*24));
+    const mod = comboMod(log);
+    (log.tags||[]).forEach(id => {
+      const decay = DECAY[id]||[1.0,0.0];
+      const dmg = DEFAULT_DMG[id]||0;
+      const rate = daysAgo < decay.length ? decay[daysAgo] : 0;
+      totalLoad += dmg * rate * mod;
+    });
+  });
+  if(recent.length >= 4){
+    const h1=recent.slice(0,Math.floor(recent.length/2));
+    const h2=recent.slice(Math.floor(recent.length/2));
+    const avg=arr=>arr.reduce((a,l)=>a+l.weight,0)/arr.length;
+    const delta=avg(h2)-avg(h1);
+    if(delta>0.3) totalLoad+=1;
+    else if(delta<-0.3) totalLoad-=1;
+  }
+  const prev3=logs.slice(-6,-3), curr3=logs.slice(-3);
+  const loadOf=arr=>arr.reduce((a,l)=>a+((l.tags||[]).reduce((s,id)=>s+(DEFAULT_DMG[id]||0),0)),0);
+  const isRecovering=prev3.length>=2&&loadOf(curr3)<loadOf(prev3);
+  let level,scoreColor,scoreBg,reason;
+  if(totalLoad<=1){
+    level="安定";scoreColor=TEAL;scoreBg=TEAL_BG;reason="負荷が低く、良いリズムです";
+  } else if(isRecovering){
+    level="回復中";scoreColor="#2563eb";scoreBg="#eff6ff";reason="最近の負荷が落ち着いてきています";
+  } else if(totalLoad<=6){
+    level="負荷高め";scoreColor=AMBER;scoreBg=AMBER_BG;reason="負荷の蓄積が見られます";
+  } else {
+    level="要リセット";scoreColor=RED;scoreBg=RED_BG;reason="高負荷が続いています。意識的に回復を";
+  }
+  return {level,scoreColor,scoreBg,reason};
+}
 
 // ── メイン: buildStatsForAI ────────────────────────────────────
 function buildStatsForAI(logs, basic, ouraData) {
@@ -464,7 +525,6 @@ if((event === "SIGNED_IN" || event === "INITIAL_SESSION") && !loaded){
 },[]);
 
 async function loadData(currentUser) {
-  console.log("loadData: start");
   try {
 const [profResult, logResult, ouraResult] = await Promise.all([
   supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
@@ -535,8 +595,7 @@ async function saveCheckup(){
 
     // Supabaseに保存
     const rows = d.data.map(r => ({...r, user_id: user.id}));
-    console.log("saving rows:", rows[0]); // ← 追加
-    await supabase.from("oura_data").upsert(rows, {onConflict:"user_id,date"});
+      await supabase.from("oura_data").upsert(rows, {onConflict:"user_id,date"});
 
     // 最終取得日を更新
     const latestDate = d.data.map(r=>r.date).sort().slice(-1)[0];
@@ -638,7 +697,7 @@ body:JSON.stringify({prompt:`あなたは健康データアナリストです。
     return result;
   })();
   const alerts=calcAlerts(logs);
-  const quickInsights=calcQuickInsights(logs,personalWeights);
+  const quickInsights=calcQuickInsights(logs);
   const h=parseFloat(basic.height);
   const age=basic.birthYear?new Date().getFullYear()-parseInt(basic.birthYear):null;
   const currentW=todayLog?.weight??prevLog?.weight;
