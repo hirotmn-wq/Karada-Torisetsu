@@ -52,6 +52,7 @@ if(sleepDetail.data?.length > 0) console.log("sleepDetail keys:", Object.keys(sl
       if(!merged[d.day]) merged[d.day] = {date: d.day};
       merged[d.day].activity_score = d.score;
       merged[d.day].steps = d.steps;
+      if(d.active_calories != null) merged[d.day].activity_burn = d.active_calories;
     });
 
     res.status(200).json({ data: Object.values(merged) });

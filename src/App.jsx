@@ -205,19 +205,22 @@ function buildOuraTrend(ouraData) {
   const weekly = {};
   sorted.forEach(o => {
     const key = getWeekKey(o.date);
-    if (!weekly[key]) weekly[key] = { hrv:[], readiness:[] };
-    if (o.hrv_average)    weekly[key].hrv.push(o.hrv_average);
+    if (!weekly[key]) weekly[key] = { hrv:[], readiness:[], actBurn:[] };
+    if (o.hrv_average)     weekly[key].hrv.push(o.hrv_average);
     if (o.readiness_score) weekly[key].readiness.push(o.readiness_score);
+    if (o.activity_burn)   weekly[key].actBurn.push(o.activity_burn);
   });
   const weekKeys = Object.keys(weekly).sort().slice(-4);
   if (weekKeys.length >= 2) {
     lines.push('週次平均（直近4週）:');
     weekKeys.forEach(w => {
-      const hrv = meanVal(removeOutliers(weekly[w].hrv));
-      const r   = meanVal(removeOutliers(weekly[w].readiness));
+      const hrv     = meanVal(removeOutliers(weekly[w].hrv));
+      const r       = meanVal(removeOutliers(weekly[w].readiness));
+      const actBurn = meanVal(removeOutliers(weekly[w].actBurn));
       const parts = [];
-      if (hrv) parts.push(`HRV:${hrv}ms`);
-      if (r)   parts.push(`Readiness:${r}`);
+      if (hrv)     parts.push(`HRV:${hrv}ms`);
+      if (r)       parts.push(`Readiness:${r}`);
+      if (actBurn) parts.push(`活動消費:${actBurn}kcal`);
       if (parts.length) lines.push(`  ${w.slice(5)}週: ${parts.join(', ')}`);
     });
     const prevHrv = meanVal(removeOutliers(weekly[weekKeys[weekKeys.length-2]].hrv));
@@ -225,6 +228,12 @@ function buildOuraTrend(ouraData) {
     if (prevHrv && currHrv) {
       const diff = +(currHrv - prevHrv).toFixed(1);
       lines.push(`HRV先週比: ${diff>0?'+':''}${diff}ms`);
+    }
+    const prevBurn = meanVal(removeOutliers(weekly[weekKeys[weekKeys.length-2]].actBurn));
+    const currBurn = meanVal(removeOutliers(weekly[weekKeys[weekKeys.length-1]].actBurn));
+    if (prevBurn && currBurn) {
+      const diff = +(currBurn - prevBurn).toFixed(0);
+      lines.push(`活動消費先週比: ${diff>0?'+':''}${diff}kcal`);
     }
   }
   const ouraWithDate = sorted.map(o => ({ date:o.date, hrv:o.hrv_average, readiness:o.readiness_score }));
