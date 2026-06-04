@@ -45,7 +45,6 @@ export default async function handler(req, res) {
       if(!merged[day]) merged[day] = {date: day};
       if(d.average_hrv != null) merged[day].hrv_average = d.average_hrv;
       if(d.lowest_heart_rate != null) merged[day].resting_hr = d.lowest_heart_rate;
-        console.log("sleepDetail sample:", day, d.lowest_heart_rate, d.average_hrv);
     });
 
     (activity.data||[]).forEach(d => {
