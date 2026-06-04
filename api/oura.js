@@ -27,7 +27,7 @@ export default async function handler(req, res) {
       merged[d.day] = {
         date: d.day,
         readiness_score: d.score,
-        resting_hr: d.contributors?.resting_heart_rate,
+        resting_hr: null,
         recovery_index: d.contributors?.recovery_index,
         temperature_deviation: d.temperature_deviation,
       };
@@ -39,13 +39,12 @@ export default async function handler(req, res) {
       merged[d.day].deep_sleep_duration = d.contributors?.deep_sleep;
       merged[d.day].awake_time = d.contributors?.total_sleep;
     });
-    
-if(sleepDetail.data?.length > 0) console.log("sleepDetail keys:", Object.keys(sleepDetail.data[0]));
-    // HRV(ms)はsleepエンドポイントから取得
+
     (sleepDetail.data||[]).forEach(d => {
       const day = d.day;
       if(!merged[day]) merged[day] = {date: day};
       if(d.average_hrv != null) merged[day].hrv_average = d.average_hrv;
+      if(d.lowest_heart_rate != null) merged[day].resting_hr = d.lowest_heart_rate;
     });
 
     (activity.data||[]).forEach(d => {
